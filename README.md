@@ -29,7 +29,7 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
   │                         嵌入引擎 = 定制 ffplay.c 补丁式复用, compat/)
   ├── calc/                CalcLink → calclink.so (C ABI)
   ├── impress/             ImpressLink → impresslink.so (C ABI 与 calc 同构)
-  └── writer/              未创建 (规划: writerlink.so 同构)
+  └── writer/               WriterLink → writerlink.so (自治 PDF 位图管线, 经验 38: 无平台层, 页表 = Draw XDrawPages)
 ```
 
 - **共享内核模式 (Linux)**:进程内一个 LO 内核(自研 `BootstrapOffice` 引导,复制官方 cppu::bootstrap 逻辑,独立 profile `~/.office-link/player`)+ 一个 Xvfb 大屏(默认 `8×3840×2160 = 30720x2160`,8 个 2160p 子屏位),多文档窗口动态落位互不重叠。调用者只需知道最大并发数 + 每文档最大分辨率。Windows 为每 session 独立 soffice + 独立桌面,不参与本模块。
@@ -40,6 +40,7 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
 - 单测 9 场景 49 检查(bootlock/slots/crossproc/acquire/adopt/dirtyenv/faultinj/linksmoke/gstcheck);加固后连续多轮全绿(经验 35)
 - 探针回归(登记 6 个,`build_probes.sh`):impress_nextpage(翻页 20 页)/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,媒体页帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限/抓帧性能)
 - **同页双视频并行播放**(dual_media.pptx 实证,经验 37);Demo 实测三画面/翻页正常;媒体页真实视频+音频
+- **writer 自治 PDF 播放**(writerlink,经验 38):戴奥良-简历.docx(1页)Create ~2.4s(缓存命中);NovaPlayer概要设计说明书.doc(90页)翻页 20-53ms/页(平均 37ms)、LRU 缓存、writer_cache 命中 0ms;NovaOfficeCore LibreOfficeWriterManager + demo Word 模式下拉框(图片/LibreOffice)已接入
 - 抓帧性能:XShm 1080p ~1ms/1440p ~2.5ms/2160p ~5.9ms;Xvfb 30720x2160 RSS ~300MB
 - LO 源码两处改动已固化远端:commit `83e0b9c3e`(gstplayer.cxx + mediawindow_impl.cxx),master == origin
 - compat/ffplay.c、cmdutils.c/h 与 SDK 上游(FFmpeg4.4.1SDK/source/ffmpeg-4.4/fftools)**diff=0**(2026-08-17 实测);ffplay_embed.patch 重放 == ffplay_embed.c(改 embed.c 必须回填 patch)
@@ -70,7 +71,26 @@ xvfb_calc_demo/media_green_probe "AI时代.pptx"                      # 默认 f
 ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 ```
 
-### 1.4 关键文件
+### 1.4 关键路径(随设计演进更新)
+
+```
+~/.office-link/                  项目用户级数据根
+  ├─ player/                     播放内核独立 profile (经验 27, EnsureKernel 默认)
+  ├─ logs/                       OfficeLog 日志 office_<pid>.log (5MB×3 轮转)
+  └─ writer_cache/               writer PDF 内容缓存 (键=源文件内容哈希, 经验 38; 规划与
+                                   /tmp/NPOfficeCache 协同复用, 见 2.6/3.1)
+/tmp/NPOfficeCache/              Nova 现有转换缓存 (缩略图链 GlobalDataSet::DoConvertDocumentW
+                                   写入: <md5>.pdf 全量 + <md5>_N.pdf 页版(Windows PageRange;
+                                   Linux 分支无滤镜实际全量); 键=源文件 MD5; /tmp 易失重启清空;
+                                   convertuser/<md5>/ 为其转换用独立 profile(经验 22), 用后清)
+/tmp/.X<n>-lock + /tmp/.X11-unix/X<n>   Xvfb 显示号 90-99 (共享运行时号段)
+/dev/shm/nova_office_slots_v1    跨进程 slot 位图 (flock+owner PID)
+/dev/shm/sem.nova_office_boot    跨进程引导信号量
+~/.config/office-link/<link>/<guid>/   会话 per-instance profile 目录 (仅 Windows bootstrap 消费;
+                                   Linux 下当前为死开销, 见 3.1 待办)
+```
+
+### 1.5 关键文件
 
 - `office_runtime/office_runtime.cpp` — 全部运行时逻辑(Xvfb 扫号 90-99/adopt/残留清理、BootstrapOffice、slot shm、BootLock、CleanupOrphanSoffice、窗口诊断、CheckGstDeps)
 - `office_runtime/ffplay/compat/` — `ffplay.c`(上游 diff=0)+ `ffplay_embed.c`(= ffplay.c + `ffplay_embed.patch`)+ `ffplay_engine.h` 引擎 C API + 手写 `config.h`
@@ -78,7 +98,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 - `calc|impress/*_session.cpp` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 窗口化放映 + gotoNextEffect 翻页)
 - `xvfb_calc_demo/build_probes.sh` — 探针登记表(过时探针不登记,旧二进制可手动跑)
 
-### 1.5 当前状态与注意事项
+### 1.6 当前状态与注意事项
 
 - **媒体后端**:默认 ffplay(`ORT_MEDIA_BACKEND`,EnsureKernel setenv 不覆盖宿主);gstreamer 为验证过的回退路径(ximagesink 补丁版 libavmediagst.so 保留;.bak 为补丁前备份)
 - **GL 全禁用**:SAL_DISABLEGL=1(转场,经验 21)+ ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——Xvfb 恒无 GPU,一切渲染固定软件路径
@@ -167,7 +187,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
-| 38 | **writer 渲染方案可行性(2026-08-17 探针实测)**:**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。**接口细节(落地直接复用)**: ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用); ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden); ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面); ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头。**性能实测**(pdf_render_probe, build_probes.sh 已登记): 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s); NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)。**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转 | 08-17 | 高(实测) |
+| 38 | **writer 渲染方案可行性(2026-08-17 探针实测)**:**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。**接口细节(落地直接复用)**: ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用); ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden); ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面); ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头。**性能实测**(pdf_render_probe, build_probes.sh 已登记): 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s); NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)。**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转。**落地决策(2026-08-17 讨论定稿, 二轮修订)**: ① 不做懒转换(保留优化空间); ② 内存 = 按需渲染 + 当前页±2 LRU 缓存(渲染 19-72ms/页, 按需足够); ③ **PDF 缓存键 = 源文件 MD5**(修订: 原 SHA-1, 为与 /tmp/NPOfficeCache 统一——一次计算双向兼容): 转换前先查 `/tmp/NPOfficeCache/<md5>.pdf`(Nova 缩略图链产物, GlobalDataSet::DoConvertDocumentW, 外部 soffice+独立 profile convertuser/<md5> 用后清), **命中总是拷贝**到 `~/.office-link/writer_cache/<md5>.pdf`(/tmp 易失+免疫外部清理; 总量上限最旧回收, 大文件阈值等优化空间保留); 未命中才自转(同内核 storeToURL), 写 writer_cache(`<md5>.pdf.<pid>.tmp` → rename 原子, 并发同播无冲突); 命中/自转后播放链直接 draw_pdf_Import(**跳过 docx 加载+转换**, 90 页场景 9s→~6.2s; draw_pdf_Import 为进程内对象, 跨会话不可缓存 = 命中后成本下限); `_N.pdf` 后缀是缩略图页版(Windows PageRange; **Linux 分支无滤镜实际全量**, 实测与主文件同字节)——writerlink 只认无后缀全量版。**反向协同不做(Nova 缩略图链不查 writer_cache)——依赖方向纪律: writerlink 定位为 NovaOfficeCore 插件, 依赖必须单向(上层→下层), 上层感知下层缓存即反向耦合**; ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式; ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)。**上层接线(2026-08-17 二轮定稿)**: ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 测试期**无视传入 mode 一律走新链**(单常量开关), 全链路(demo)测试通过后回切默认 PDF 链(WordManager, 不动), LibreOfficeWriterManager 作为 mode 可选的**备选方案**提交; NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰) | 08-17 | 高(实测) |
 
 ## 三、项目规划
 
@@ -177,7 +197,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
-| ★★★ | **writer 模块**:照 impress 模式(writerlink.so;XPageCursor 页导航,直接渲染不转 PDF) | 核心交付 |
+| ★★★ | **writer 模块**(方案已定稿, 经验 38):writerlink.so 自治 PDF 位图管线(无平台层/无窗口),含 PDF 内容缓存与按需渲染 LRU;C ABI 同构 calc/impress | 核心交付 |
 | ★★ | calc_session Linux 下 profile seed 死开销(每次 Create 复制整个 office/user 但 Linux 不消费;Windows bootstrap 才用)| 注释审查发现,讨论后改 |
 | ★★ | 诊断日志清理:[CALC-T]/[IMP-T] 等 fprintf(定位已完成);[SCROLL]/[UIHIDE] 保留 | 收尾 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
