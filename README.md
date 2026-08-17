@@ -13,7 +13,7 @@
 ```
 NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: NovaLibreOffice-
   │                        PlayerDeprecated(旧独立进程方案,待废弃)/OfficeRuntime/
-  │                        CalcLink/ImpressLink/FFplay)
+  │                        CalcLink/ImpressLink/FFplay/WriterLink)
   ├── common/              基础层 (零依赖 office_runtime)
   │     link_platform.h   LinkPlatform 统一平台接口 (工厂: CreateCalc/ImpressPlatform)
   │     link_utils.h/.cpp u2s/s2u + HideUiBlock UI 隐藏三件套 + DumpUiState 自省
@@ -29,7 +29,7 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
   │                         嵌入引擎 = 定制 ffplay.c 补丁式复用, compat/)
   ├── calc/                CalcLink → calclink.so (C ABI)
   ├── impress/             ImpressLink → impresslink.so (C ABI 与 calc 同构)
-  └── writer/               WriterLink → writerlink.so (自治 PDF 位图管线, 经验 38: 无平台层, 页表 = Draw XDrawPages)
+  └── writer/              WriterLink → writerlink.so (自治 PDF 位图管线, 经验 38: 无平台层, 页表 = Draw XDrawPages)
 ```
 
 - **共享内核模式 (Linux)**:进程内一个 LO 内核(自研 `BootstrapOffice` 引导,复制官方 cppu::bootstrap 逻辑,独立 profile `~/.office-link/player`)+ 一个 Xvfb 大屏(默认 `8×3840×2160 = 30720x2160`,8 个 2160p 子屏位),多文档窗口动态落位互不重叠。调用者只需知道最大并发数 + 每文档最大分辨率。Windows 为每 session 独立 soffice + 独立桌面,不参与本模块。
@@ -38,9 +38,9 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
 ### 1.2 已验证能力
 
 - 单测 9 场景 49 检查(bootlock/slots/crossproc/acquire/adopt/dirtyenv/faultinj/linksmoke/gstcheck);加固后连续多轮全绿(经验 35)
-- 探针回归(登记 6 个,`build_probes.sh`):impress_nextpage(翻页 20 页)/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,媒体页帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限/抓帧性能)
+- 探针回归(登记 9 个,`build_probes.sh`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)
 - **同页双视频并行播放**(dual_media.pptx 实证,经验 37);Demo 实测三画面/翻页正常;媒体页真实视频+音频
-- **writer 自治 PDF 播放**(writerlink,经验 38):戴奥良-简历.docx(1页)Create ~2.4s(缓存命中);NovaPlayer概要设计说明书.doc(90页)翻页 20-53ms/页(平均 37ms)、LRU 缓存、writer_cache 命中 0ms;NovaOfficeCore LibreOfficeWriterManager + demo Word 模式下拉框(图片/LibreOffice)已接入
+- **writer 自治 PDF 播放全链路已闭环**(writerlink,经验 38):底层(翻页 20-53ms/页、LRU、缓存命中 0ms、Prev 验证)→ NovaOfficeCore(LibreOfficeWriterManager, mode=3 正式分发)→ NovaPlayer 核心(WordInstance 映射)→ demo(Word 模式下拉框 图片/LibreOffice,StepBack 修复);demo 实测 90 页文档翻页/上一页正常,纹理 763x1080
 - 抓帧性能:XShm 1080p ~1ms/1440p ~2.5ms/2160p ~5.9ms;Xvfb 30720x2160 RSS ~300MB
 - LO 源码两处改动已固化远端:commit `83e0b9c3e`(gstplayer.cxx + mediawindow_impl.cxx),master == origin
 - compat/ffplay.c、cmdutils.c/h 与 SDK 上游(FFmpeg4.4.1SDK/source/ffmpeg-4.4/fftools)**diff=0**(2026-08-17 实测);ffplay_embed.patch 重放 == ffplay_embed.c(改 embed.c 必须回填 patch)
@@ -77,8 +77,8 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 ~/.office-link/                  项目用户级数据根
   ├─ player/                     播放内核独立 profile (经验 27, EnsureKernel 默认)
   ├─ logs/                       OfficeLog 日志 office_<pid>.log (5MB×3 轮转)
-  └─ writer_cache/               writer PDF 内容缓存 (键=源文件内容哈希, 经验 38; 规划与
-                                   /tmp/NPOfficeCache 协同复用, 见 2.6/3.1)
+  └─ writer_cache/               writer PDF 内容缓存 (键=源文件 MD5, 经验 38; 已落地与
+                                   /tmp/NPOfficeCache 协同复用: 命中即拷贝, 未命中自转)
 /tmp/NPOfficeCache/              Nova 现有转换缓存 (缩略图链 GlobalDataSet::DoConvertDocumentW
                                    写入: <md5>.pdf 全量 + <md5>_N.pdf 页版(Windows PageRange;
                                    Linux 分支无滤镜实际全量); 键=源文件 MD5; /tmp 易失重启清空;
@@ -183,7 +183,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 ---
 
-### 2.6 文档渲染(writer 规划)
+### 2.6 文档渲染(writer, 已落地 2026-08-17)
 
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
