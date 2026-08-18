@@ -135,7 +135,52 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 7 | **Hidden 加载**:slot 方案下 Hidden 加载正常无闪烁;可见加载方案已废弃 | 08-12 前 | 高 |
 | 9 | **退出时 X IO Error 噪音无影响**(atexit 杀 Xvfb 时 LO 打印 Fatal 后退出) | 08-12 前 | 高 |
 | 19c | 会话重建不做:确定性故障重建仍崩;改为崩溃检测+明确告警 | 08-12 | 高 |
-| 41 | **Impress 暂停→恢复翻页失效(2026-08-18, Demo 实测修复)**:上层 pause/resume 链路**不对称**——pause 走 `Pause()`(设 `paused_=true`, poller 不停), resume 走 `Start()`(非 `Resume()`)。`Start()` 内 `paused_=false` 原写在 `StartPoller()` 里, 但 `StartPoller()` 对 `poll_running_==true` 做 early-return(pause 不停 poller, 所以恢复时必命中)→ `paused_` 永远不被重置→ poller 跳过抓帧 + `NextPage()` 虽调 `gotoNextEffect()` 但帧不刷新。**修复**: `Start()` 中 `slideshow_->resume()` 后、`StartPoller()` 前显式 `paused_=false`(一行, impress_session.cpp:331)。**教训**: 暂停/恢复走不同入口时, 状态重置必须放在入口函数本身, 不能委托给可能被 early-return 的下游 | 08-18 | 高(实测修复) |
+| 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置, 一行修复。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
+| 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + 两个 bug + 性能问题, 修复优先级已排。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(分析完成, 待实施) |
+
+#### 经验 41 详述
+
+**Impress 暂停→恢复翻页失效 (2026-08-18, Demo 实测修复)**
+
+上层 pause/resume 链路**不对称**——pause 走 `Pause()`(设 `paused_=true`, poller 不停), resume 走 `Start()`(非 `Resume()`)。
+
+`Start()` 内 `paused_=false` 原写在 `StartPoller()` 里, 但 `StartPoller()` 对 `poll_running_==true` 做 early-return(pause 不停 poller, 所以恢复时必命中)→ `paused_` 永远不被重置→ poller 跳过抓帧 + `NextPage()` 虽调 `gotoNextEffect()` 但帧不刷新。
+
+**修复**: `Start()` 中 `slideshow_->resume()` 后、`StartPoller()` 前显式 `paused_=false`(一行, impress_session.cpp:331)。
+
+**教训**: 暂停/恢复走不同入口时, 状态重置必须放在入口函数本身, 不能委托给可能被 early-return 的下游。
+
+#### 经验 42 详述
+
+**FramePoller 共性分析与治理 (2026-08-18, 待实施)**
+
+Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running_`/`paused_`/`force_frame_`/`mu_`)完全同名同型, 但实现六维不一致。
+
+**Bug 级问题:**
+
+- ① **Impress `force_frame_` 泄漏**——PollThread 只读不清(`if (!paused_ || force_frame_)`), UpdateFrame() 设后 poller 暂停时仍持续抓帧; Calc/Writer 正确用 `exchange(false)` 消费
+- ② **Calc `Start()` 不重置 `paused_`**——同 Impress #41 修复前状态, 隐患
+
+**六维不一致:**
+
+| 维度 | Impress | Calc | Writer |
+|---|---|---|---|
+| Start()重置 paused_ | ✅ | ❌ | ✅ |
+| Start/Pause/Stop 持锁 | 全✅ | 全❌ | 混合 |
+| UpdateFrame 语义 | 同步+flag | 异步flag-only | 同步+锁 |
+| PollThread 持锁 | 无锁 | 全循环锁 | 全循环锁 |
+| Heartbeat | 无 | 100ms(暂停也跳) | 100ms(暂停不跳) |
+| Poll 间隔 | 40ms | 5ms | 5ms |
+
+**性能问题:**
+
+- Calc PollThread 持锁调 UNO(跨进程延迟阻塞其他操作)
+- Calc/Writer 5ms 轮询远超实际变化频率
+- Impress 静止无条件抓帧
+
+**根因**: 三 link poller 基础设施完全重复, 无统一基类约束。
+
+**修复优先级**: 立即(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(提取 FramePollerBase 统一三 link)
 
 ### 2.2 跨进程协调(共享屏/内核/slot)
 
@@ -187,7 +232,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
 | 8 | **run.sh 依赖**:$CURDIR(ffmpeg 库)+ $CURDIR/office/program(UNO 库)必需;$CURDIR 展开为绝对路径 | 08-12 前 | 高 |
-| 16 | **ABI 同步已由依赖图承接**(office_runtime.h 变更重编三件套);历史教训:只重编 office_runtime 导致 undefined symbol | 08-12 | 高 |
+| 16 | **ABI 同步已由依赖图承接**(office_runtime.h 变更重编三件套);历史教训:只重编 office_runtime 导致 undefined symbol | 08-12 前 | 高 |
 | — | **组件名陷阱**:gstreamer 生效组件是 libavmediagst.so(libavmedialo.so 是另一组件) | 08-12 | 高 |
 | 36 | **相对 LD_LIBRARY_PATH 陷阱(2026-08-17)**:手动跑探针/单测用相对路径→dladdr→UNO_PATH 相对化→BootstrapOffice DeploymentException SIGABRT。产品不受影响(run.sh $CURDIR 绝对)。**探针/单测烧入绝对 RUNPATH,免设直接跑(推荐)**;手动设置必须绝对路径。部署目录=NovaPlayer/bin_<arch>_<sys>(非 NovaPlayerTools/) | 08-17 | 高 |
 
@@ -197,8 +242,62 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
-| 40 | **user 模板机制 + office-link 命名定稿 (2026-08-18)**:① **UI 控制三层优先级(定论)**: UNO API > 平台窗口 API(X11/Win32) > user 模板配置 — 单一层做不到完全控制, 模板是基线兜底不承担运行时控制; Windows 的 per-session fresh copy 正是该层配套防御(运行期写回的 UI 状态不跨 session 存活) ② **命名**: Linux `~/.office-link/xvfb/`(内核跑在 Xvfb 上, 名字直指机制; 原 player/ 更名, 运行时数据无迁移负担)、Windows `desktops/<link>/<guid>/`(每 session 独立桌面); office_paths: `xvfb_profile()/desktop_profile()/user_template()` ③ **模板 = 仓库 `templates/user/registrymodifications.xcu` 单文件**(126→66 item 净化: 保留 3 工具栏 Visible=false+Locked/TabBarVisible=false/SlideSorterBar 按视图/Misc.Start 放映 4 条/Sidebar ContextList 10 条/FirstRun=false/两个 Factory 窗口属性=固定值 `10,1,1920,1080;1;,,,;`(原值机器相关 3725x1992, 模板须跨机器); 剔除: 最近文件/Recovery/绝对路径/时间戳/Linguistic/ooLocale(让环境决定)/默认值写回约 60 条)。构建随 OfficeRuntime 部署到 office/program/templates/ ④ **消费语义双平台统一**: 引导/会话创建时 fresh copy(回模板基线), Linux `SeedKernelProfile`(EnsureKernel 引导前; **活内核防护**: cmdline 含 soffice.bin+该 profile 的进程活着时跳过 — 跨进程共享内核复用路径绝不能删正在运行的内核的 profile), Windows 平台层 seed(office/user 退役) ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20 ⑥ **孤儿文档锁坑(新)**: 用户 UI soffice 会话退出后 `.~lock.<doc>#` 残留(锁跨 profile 生效!)→ 播放链 Hidden 加载返回空组件("doc loaded FAILED"), 表现为"任何 profile/模板配置下都失败" — 排查先查文档同目录锁文件; 2026-08-18 实测差点误判为模板回归 | 08-18 | 高(实证) |
-| 38 | **writer 渲染方案可行性(2026-08-17 探针实测)**:**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。**接口细节(落地直接复用)**: ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用); ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden); ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面); ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头。**性能实测**(pdf_render_probe, build_probes.sh 已登记): 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s); NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)。**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转。**落地决策(2026-08-17 讨论定稿, 二轮修订)**: ① 不做懒转换(保留优化空间); ② 内存 = 按需渲染 + 当前页±2 LRU 缓存(渲染 19-72ms/页, 按需足够); ③ **PDF 缓存键 = 源文件 MD5**(修订: 原 SHA-1, 为与 /tmp/NPOfficeCache 统一——一次计算双向兼容): 转换前先查 `/tmp/NPOfficeCache/<md5>.pdf`(Nova 缩略图链产物, GlobalDataSet::DoConvertDocumentW, 外部 soffice+独立 profile convertuser/<md5> 用后清), **命中总是拷贝**到 `~/.office-link/writer_cache/<md5>.pdf`(/tmp 易失+免疫外部清理; 总量上限最旧回收, 大文件阈值等优化空间保留); 未命中才自转(同内核 storeToURL), 写 writer_cache(`<md5>.pdf.<pid>.tmp` → rename 原子, 并发同播无冲突); 命中/自转后播放链直接 draw_pdf_Import(**跳过 docx 加载+转换**, 90 页场景 9s→~6.2s; draw_pdf_Import 为进程内对象, 跨会话不可缓存 = 命中后成本下限); `_N.pdf` 后缀是缩略图页版(Windows PageRange; **Linux 分支无滤镜实际全量**, 实测与主文件同字节)——writerlink 只认无后缀全量版。**反向协同不做(Nova 缩略图链不查 writer_cache)——依赖方向纪律: writerlink 定位为 NovaOfficeCore 插件, 依赖必须单向(上层→下层), 上层感知下层缓存即反向耦合**; ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式; ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)。**上层接线(2026-08-17 二轮定稿)**: ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 实际落地为**正式 mode 分发**(比原计划更进一步): WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3 走新链, 其余走 WordManager(PDF 链, 不动); 上层 Manager 方案(IWordManager/LibreOfficeWriterManager)2026-08-18 回退: writerlink 功能就绪但上层接线暂不接入; IWordManager.h 删除, WordCoreExport/WordManager 还原(回 shared_ptr<WordManager> 直接分发), LibreOfficeWriterManager.cpp/.h 作为样板保留(去 IWordManager 依赖, 不参与构建); NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰)。**质量收尾(2026-08-17 三轮)**: ⑦ **UpdateFrame 已修**: 原实现只置标志等轮询, Stop 后轮询线程已停→标志无人消费→"停止后取一帧"黑屏(writer_probe 复现 frames=0); 现锁内直接 PushFrame(语义对齐 impress); ⑧ **LO 统一尺寸认知(draw_pdf_Import)**: 混合页面尺寸 PDF(横竖混排实测 612x792/842x595/595x842)导入 Draw 后**所有页统一为第一页尺寸**, createPreview 全部同尺寸输出(834x1080)——"缓存命中不刷新 width_/height_ 的错配前提不存在"(per-page 尺寸处理不需要); writer_probe 的 WRITER_MIXED 段留作回归锚点(LO 行若变会 FAIL 提醒); ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查); ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植) | 08-17 | 高(实测) |
+| 40 | **user 模板机制 + office-link 命名定稿**:UI 控制三层优先级 / 命名 / 模板净化 / 消费语义 / 孤儿文档锁坑。详见下方 [经验 40 详述](#经验-40-详述) | 08-18 | 高(实证) |
+| 38 | **writer 渲染方案可行性**:docx→PDF→Draw→XSlideRenderer→BGRA 全 UNO 自治 / 接口细节 / 性能 / 缓存 / 上层接线 / 质量收尾。详见下方 [经验 38 详述](#经验-38-详述) | 08-17 | 高(实测) |
+
+#### 经验 40 详述
+
+**user 模板机制 + office-link 命名定稿 (2026-08-18)**
+
+- ① **UI 控制三层优先级(定论)**: UNO API > 平台窗口 API(X11/Win32) > user 模板配置 — 单一层做不到完全控制, 模板是基线兜底不承担运行时控制; Windows 的 per-session fresh copy 正是该层配套防御(运行期写回的 UI 状态不跨 session 存活)
+- ② **命名**: Linux `~/.office-link/xvfb/`(内核跑在 Xvfb 上, 名字直指机制; 原 player/ 更名, 运行时数据无迁移负担)、Windows `desktops/<link>/<guid>/`(每 session 独立桌面); office_paths: `xvfb_profile()/desktop_profile()/user_template()`
+- ③ **模板 = 仓库 `templates/user/registrymodifications.xcu` 单文件**(126→66 item 净化: 保留 3 工具栏 Visible=false+Locked/TabBarVisible=false/SlideSorterBar 按视图/Misc.Start 放映 4 条/Sidebar ContextList 10 条/FirstRun=false/两个 Factory 窗口属性=固定值 `10,1,1920,1080;1;,,,;`(原值机器相关 3725x1992, 模板须跨机器); 剔除: 最近文件/Recovery/绝对路径/时间戳/Linguistic/ooLocale(让环境决定)/默认值写回约 60 条)。构建随 OfficeRuntime 部署到 office/program/templates/
+- ④ **消费语义双平台统一**: 引导/会话创建时 fresh copy(回模板基线), Linux `SeedKernelProfile`(EnsureKernel 引导前; **活内核防护**: cmdline 含 soffice.bin+该 profile 的进程活着时跳过 — 跨进程共享内核复用路径绝不能删正在运行的内核的 profile), Windows 平台层 seed(office/user 退役)
+- ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20
+- ⑥ **孤儿文档锁坑(新)**: 用户 UI soffice 会话退出后 `.~lock.<doc>#` 残留(锁跨 profile 生效!)→ 播放链 Hidden 加载返回空组件("doc loaded FAILED"), 表现为"任何 profile/模板配置下都失败" — 排查先查文档同目录锁文件; 2026-08-18 实测差点误判为模板回归
+
+#### 经验 38 详述
+
+**writer 渲染方案可行性 (2026-08-17 探针实测)**
+
+**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。
+
+**接口细节(落地直接复用)**:
+
+- ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用)
+- ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden)
+- ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面)
+- ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头
+
+**性能实测**(pdf_render_probe, build_probes.sh 已登记):
+
+- 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s)
+- NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)
+
+**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。
+
+**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。
+
+**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转。
+
+**落地决策(2026-08-17 讨论定稿, 二轮修订)**:
+
+- ① 不做懒转换(保留优化空间)
+- ② 内存 = 按需渲染 + 当前页±2 LRU 缓存(渲染 19-72ms/页, 按需足够)
+- ③ **PDF 缓存键 = 源文件 MD5**(修订: 原 SHA-1, 为与 /tmp/NPOfficeCache 统一——一次计算双向兼容): 转换前先查 `/tmp/NPOfficeCache/<md5>.pdf`(Nova 缩略图链产物, GlobalDataSet::DoConvertDocumentW, 外部 soffice+独立 profile convertuser/<md5> 用后清), **命中总是拷贝**到 `~/.office-link/writer_cache/<md5>.pdf`(/tmp 易失+免疫外部清理; 总量上限最旧回收, 大文件阈值等优化空间保留); 未命中才自转(同内核 storeToURL), 写 writer_cache(`<md5>.pdf.<pid>.tmp` → rename 原子, 并发同播无冲突); 命中/自转后播放链直接 draw_pdf_Import(**跳过 docx 加载+转换**, 90 页场景 9s→~6.2s; draw_pdf_Import 为进程内对象, 跨会话不可缓存 = 命中后成本下限); `_N.pdf` 后缀是缩略图页版(Windows PageRange; **Linux 分支无滤镜实际全量**, 实测与主文件同字节)——writerlink 只认无后缀全量版。**反向协同不做(Nova 缩略图链不查 writer_cache)——依赖方向纪律: writerlink 定位为 NovaOfficeCore 插件, 依赖必须单向(上层→下层), 上层感知下层缓存即反向耦合**
+- ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式
+- ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)
+
+**上层接线(2026-08-17 二轮定稿)**:
+
+- ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 实际落地为**正式 mode 分发**(比原计划更进一步): WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3 走新链, 其余走 WordManager(PDF 链, 不动); 上层 Manager 方案(IWordManager/LibreOfficeWriterManager)2026-08-18 回退: writerlink 功能就绪但上层接线暂不接入; IWordManager.h 删除, WordCoreExport/WordManager 还原(回 shared_ptr<WordManager> 直接分发), LibreOfficeWriterManager.cpp/.h 作为样板保留(去 IWordManager 依赖, 不参与构建); NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰)
+
+**质量收尾(2026-08-17 三轮)**:
+
+- ⑦ **UpdateFrame 已修**: 原实现只置标志等轮询, Stop 后轮询线程已停→标志无人消费→"停止后取一帧"黑屏(writer_probe 复现 frames=0); 现锁内直接 PushFrame(语义对齐 impress)
+- ⑧ **LO 统一尺寸认知(draw_pdf_Import)**: 混合页面尺寸 PDF(横竖混排实测 612x792/842x595/595x842)导入 Draw 后**所有页统一为第一页尺寸**, createPreview 全部同尺寸输出(834x1080)——"缓存命中不刷新 width_/height_ 的错配前提不存在"(per-page 尺寸处理不需要); writer_probe 的 WRITER_MIXED 段留作回归锚点(LO 行若变会 FAIL 提醒)
+- ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查)
+- ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植)
 
 ## 三、项目规划
 
@@ -224,4 +323,21 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 ---
 
-*已关闭:gstreamer 路径清理(08-14);LO 改动同步远端(08-17,commit 83e0b9c3e);ffplay 多实例并行播放(08-17,经验 37);office_runtime 防御增强与单测加固(08-17,经验 35);**废弃 source/ 旧方案**(08-17,零实例化实证后全平台清理,1.6);writer UpdateFrame 语义修复(08-17,经验 38⑦);**writerlink 底层链路闭环**(08-17,经验 38);诊断日志清理(08-18,日志体系统一);代码重构(08-18,link_utils 工具整合/DEFER/UNO_GUARD/异常日志补全/SYS_gettid 可移植);**Impress 暂停→恢复翻页失效**(08-18,经验 41)。*
+### 已关闭事项
+
+**2026-08-18:**
+- 诊断日志清理(日志体系统一: 前缀/级别/单入口)
+- 代码重构(link_utils 工具整合/DEFER/UNO_GUARD/异常日志补全/SYS_gettid 可移植)
+- **Impress 暂停→恢复翻页失效**(经验 41, 实测修复)
+- **FramePoller 共性分析**(经验 42, 待实施)
+
+**2026-08-17:**
+- LO 改动同步远端(commit 83e0b9c3e)
+- ffplay 多实例并行播放(经验 37)
+- office_runtime 防御增强与单测加固(经验 35)
+- **废弃 source/ 旧方案**(零实例化实证后全平台清理, 1.6)
+- writer UpdateFrame 语义修复(经验 38⑦)
+- **writerlink 底层链路闭环**(经验 38)
+
+**2026-08-14:**
+- gstreamer 路径清理
