@@ -17,16 +17,13 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
   ├── common/              基础层 (零依赖 office_runtime)
   │     link_platform.h   LinkPlatform 统一平台接口 (工厂: CreateCalc/ImpressPlatform)
   │     link_utils.h/.cpp u2s/s2u + HideUiBlock UI 隐藏三件套 + DumpUiState 自省
-  │     log.h             OfficeLog 声明 (Linux 实现唯一在 office_runtime.so 单例
-  │                       防双写; Windows 实现 common/win_office_log.cpp, 经验 39)
-  │     office_paths.h    .office-link 路径命名空间 (header-only, 经验 39)
+  │     log.h             OfficeLog 声明 (实现唯一在 office_runtime.so, 勿编第二份)
   │     cmake/FindLibreOfficeSDK.cmake  SDK 查找 (缓存自愈)
   │     linux/xvfb_platform.*  XvfbSessionPlatform 单类参数化 (抓帧/slot/落位)
   │     linux/linux_platforms.cpp  工厂 (匹配规则即文档类型差异, 各 2 行)
-  │     windows/win_platform.*  WindowsPlatform (CreateDesktop 独立进程模式;
-  │                                calc/impress 共用, 经验 39 补齐)
+  │     windows/win_platform.*  WindowsPlatform (CreateDesktop 独立进程模式; impress stub)
   ├── office_runtime/      OfficeRuntime → office_runtime.so — 进程级共享运行时 (Linux)
-  │     Xvfb 大屏/LO 共享内核/slot shm/跨进程 BootLock/孤儿清场/诊断
+  │     Xvfb 大屏/LO 共享内核/slot shm/跨进程 BootLock/孤儿清场/BootLock/诊断
   │     office_runtime_test.cpp — 单测 (9 场景 49 检查, --stress N)
   │     ffplay/            FFplay → ffplay.so — 自治媒体后端 (Manager_FFPlay;
   │                         嵌入引擎 = 定制 ffplay.c 补丁式复用, compat/)
@@ -43,7 +40,7 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Nov
 - 单测 9 场景 49 检查(bootlock/slots/crossproc/acquire/adopt/dirtyenv/faultinj/linksmoke/gstcheck);加固后连续多轮全绿(经验 35)
 - 探针回归(登记 9 个,`build_probes.sh`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)
 - **同页双视频并行播放**(dual_media.pptx 实证,经验 37);Demo 实测三画面/翻页正常;媒体页真实视频+音频
-- **writer 自治 PDF 播放全链路已验证**(writerlink,经验 38):底层(翻页 20-53ms/页、LRU、缓存命中 0ms、Prev 验证)→ NovaOfficeCore(LibreOfficeWriterManager, CORE-WORD 探针全链路 PASS)→ demo(翻页/上一页正常,纹理 763x1080);**当前不上线**(2026-08-17 用户定调:功能保留, 默认 PDF 链 WordManager, LibreOfficeWriterManager 源码保留不编译, 恢复指引见 WordCoreExport.cpp 头注释)
+- **writer 自治 PDF 播放全链路已闭环**(writerlink,经验 38):底层(翻页 20-53ms/页、LRU、缓存命中 0ms、Prev 验证)→ NovaOfficeCore(LibreOfficeWriterManager, mode=3 正式分发)→ NovaPlayer 核心(WordInstance 映射)→ demo(Word 模式下拉框 图片/LibreOffice,StepBack 修复);demo 实测 90 页文档翻页/上一页正常,纹理 763x1080
 - 抓帧性能:XShm 1080p ~1ms/1440p ~2.5ms/2160p ~5.9ms;Xvfb 30720x2160 RSS ~300MB
 - LO 源码两处改动已固化远端:commit `83e0b9c3e`(gstplayer.cxx + mediawindow_impl.cxx),master == origin
 - compat/ffplay.c、cmdutils.c/h 与 SDK 上游(FFmpeg4.4.1SDK/source/ffmpeg-4.4/fftools)**diff=0**(2026-08-17 实测);ffplay_embed.patch 重放 == ffplay_embed.c(改 embed.c 必须回填 patch)
@@ -72,27 +69,16 @@ xvfb_calc_demo/impress_multi_probe "志愿分析.xlsx" "7-8月报销明细表-�
 # 媒体回归 (双态)
 xvfb_calc_demo/media_green_probe "AI时代.pptx"                      # 默认 ffplay
 ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
-
-# Windows 构建 (同一棵树的 Windows 分支, 经验 39): 跳过 office_runtime/ffplay/旧 exe
-cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build build_win --config Release
-# 产物直出部署 NovaPlayer/bin/office/program (calclink/impresslink/writerlink)
-# NovaOfficeCore (上层): MSBuild NovaOfficeCore.vcxproj (输出 NovaPlayer/bin/)
-# Windows 冒烟: probe_win/win_smoke_probe.exe <program_dir> <xlsx> <docx> <pptx> (rc=0 全过)
 ```
 
 ### 1.4 关键路径(随设计演进更新)
 
 ```
-~/.office-link/                  项目用户级数据根 (路径统一 office_paths.h, 经验 39;
-                                  Windows = %LOCALAPPDATA%\office-link 全 Local;
-                                  环境变量 ORT_HOME 覆盖基目录)
+~/.office-link/                  项目用户级数据根
   ├─ player/                     播放内核独立 profile (经验 27, EnsureKernel 默认)
-  ├─ logs/                       OfficeLog 日志 office_<pid>.log (Linux 5MB×3 轮转;
-                                   Windows 追加文件, 实现 win_office_log.cpp)
-  ├─ writer_cache/               writer PDF 内容缓存 (键=源文件 MD5, 经验 38; 已落地与
+  ├─ logs/                       OfficeLog 日志 office_<pid>.log (5MB×3 轮转)
+  └─ writer_cache/               writer PDF 内容缓存 (键=源文件 MD5, 经验 38; 已落地与
                                    /tmp/NPOfficeCache 协同复用: 命中即拷贝, 未命中自转)
-  └─ profiles/<link>/<guid>/     per-instance 会话 profile (仅 Windows bootstrap 消费:
-                                   seed office\user + pidfile; 经验 39 平台下沉)
 /tmp/NPOfficeCache/              Nova 现有转换缓存 (缩略图链 GlobalDataSet::DoConvertDocumentW
                                    写入: <md5>.pdf 全量 + <md5>_N.pdf 页版(Windows PageRange;
                                    Linux 分支无滤镜实际全量); 键=源文件 MD5; /tmp 易失重启清空;
@@ -100,8 +86,8 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 /tmp/.X<n>-lock + /tmp/.X11-unix/X<n>   Xvfb 显示号 90-99 (共享运行时号段)
 /dev/shm/nova_office_slots_v1    跨进程 slot 位图 (flock+owner PID)
 /dev/shm/sem.nova_office_boot    跨进程引导信号量
-(Windows per-instance profile 已统一入 office_paths::session_profile, 经验 39;
- Linux 无 per-instance profile 消费方, 原 $XDG_CONFIG_HOME 路径已清理)
+~/.config/office-link/<link>/<guid>/   会话 per-instance profile 目录 (仅 Windows bootstrap 消费;
+                                   Linux 下当前为死开销, 见 3.1 待办)
 ```
 
 ### 1.5 关键文件
@@ -109,39 +95,20 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 - `office_runtime/office_runtime.cpp` — 全部运行时逻辑(Xvfb 扫号 90-99/adopt/残留清理、BootstrapOffice、slot shm、BootLock、CleanupOrphanSoffice、窗口诊断、CheckGstDeps)
 - `office_runtime/ffplay/compat/` — `ffplay.c`(上游 diff=0)+ `ffplay_embed.c`(= ffplay.c + `ffplay_embed.patch`)+ `ffplay_engine.h` 引擎 C API + 手写 `config.h`
 - `common/linux/xvfb_platform.cpp` — XShm 抓帧 + BGRX 字节序直拷 + 窗口扫描/落位
-- `calc|impress/*_session.cpp` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 放映 — Windows 全屏 (经验 39) / Linux 窗口化 + gotoNextEffect 翻页)
-- `xvfb_calc_demo/build_probes.sh` — Linux 探针登记表(过时探针不登记,旧二进制可手动跑;目录在 Linux 机器,不在仓库)
-- `probe_win/` — Windows 冒烟探针 (win_smoke_probe: CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT 五段, 样例 make_samples.py)
+- `calc|impress/*_session.cpp` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 窗口化放映 + gotoNextEffect 翻页)
+- `xvfb_calc_demo/build_probes.sh` — 探针登记表(过时探针不登记,旧二进制可手动跑)
 
 ### 1.6 当前状态与注意事项
 
-- **媒体后端**:默认 ffplay(`ORT_MEDIA_BACKEND`,EnsureKernel setenv 不覆盖宿主);gstreamer 为验证过的回退路径(ximagesink 补丁版 libavmediagst.so 保留;.bak 为补丁前备份)。**Linux 专属** (Windows LO 用系统媒体后端)
-- **GL 全禁用**:SAL_DISABLEGL=1(Linux 转场,经验 21; **Windows 亦设** (win_platform PrepareEnvironment, 白帧修复 2026-08-17)) + ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——渲染固定软件路径 (Xvfb/隐藏桌面均无可用 GPU 加速)
-- 日志:统一 `[前缀]` + 时间戳 `[YYYY-MM-DD HH:MM:SS.mmm]`;Linux `~/.office-link/logs/office_<pid>.log`(spdlog 5MB×3 轮转), Windows `%LOCALAPPDATA%\office-link\logs\office_<pid>.log`(追加, 经验 39);ORT_LOG=file|stderr|both|off (stderr 副本有缓冲差异,排查以文件为准)
+- **媒体后端**:默认 ffplay(`ORT_MEDIA_BACKEND`,EnsureKernel setenv 不覆盖宿主);gstreamer 为验证过的回退路径(ximagesink 补丁版 libavmediagst.so 保留;.bak 为补丁前备份)
+- **GL 全禁用**:SAL_DISABLEGL=1(转场,经验 21)+ ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——Xvfb 恒无 GPU,一切渲染固定软件路径
+- **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[Common]`(子场景点分如 `[CalcLink.Scroll]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),保留独立 fprintf + `[FFPLAY]`。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**——仅跳过初始化时 spdlog 默认 logger 仍打 stdout,已修)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准)
 - **所有者退出连坐**:共享内核/屏的所有者进程退出,其他进程会话断开;双实例部署需同时使用
-- **Windows (2026-08-17 双平台整合完成)**:单一构建树 `cmake -S . -B build_win -A x64`
-  (跳过 office_runtime/ffplay/旧exe); 三 link 编译+冒烟全过 (probe_win/win_smoke_probe,
-  样例 make_samples.py); 进程零残留 (writer Destroy terminate 修复); 详见经验 39
-- **Calc Windows 回归通过 (2026-08-17 demo 实测)**:菜单栏隐藏修复生效 (SizeWindowToSlot
-  实现为全屏无边框, 容器 pos=0,0 3840x2160), 三 xlsx 并发正常; 诊断日志体系就绪
-  ([WIN-W] FindWindow/SetWindowSize + [UIHIDE] before/after setMenuBar 容器 posSize)
-- **NovaOfficeCore word 接线 — 已还原 (2026-08-17 用户定调: 功能保留不上线)**:
-  验证历程: 壳拉取 (b01c8ec7) → 补齐 IWordManager.h + WordManager 实现接口 +
-  WordCoreExport 测试开关 (无视 mode 走新链) + `WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3`
-  枚举 + CMake/vcxproj 接线 + CORE-WORD 探针全链路 PASS (含中文文件名 docx);
-  **还原**: 默认 PDF 链 (WordManager), LibreOfficeWriterManager 源码保留仓库不编译
-  (WordCoreExport.cpp `#if 0` 包裹 + CMake/vcxproj 移除), 恢复指引见代码注释;
-  三 manager GetProcAddress 的 void*->HMODULE 转换修复 (保留); writer 原生文件操作
-  宽路径化 (经验 39 坑⑤, 保留)
-- **NovaOfficeCore ppt 接线 (2026-08-17, demo 确认)**:Windows 的 PptCoreExport
-  分发**从未挂载** LibreOfficeImpressManager (mode=4 落到图片模式; 被注释的是
-  旧壳 PptAnimationManagerLibreOffice); 修复 = Windows 分支补分发 (与 Linux 同构)
-  + include 移公共区 + vcxproj 补 LibreOfficeImpressManager.cpp (excel 的
-  CalcManager 有, ppt 漏了); 探针 CORE-PPT 全链路 PASS (mode=4, 26 页,
-  全屏放映帧 @3840x2160, 放映窗口 SALTMPSUBFRAME + "Presenting: "); demo 确认
-  翻页动画白帧修复 (SAL_DISABLEGL)
+- Windows:impress stub + win_platform 未编译验证,需 Windows 侧确认
 - UNO_PATH/URE_BOOTSTRAP 依赖部署位置(office/program),部署路径变化需同步(经验 23/33)
-- 已知待清理:① ~~calc_session 的 per-instance profile seed 死开销~~ → **已消除**(经验 39 下沉 WindowsPlatform::PrepareEnvironment, Linux 不再执行; Linux per-instance profile 路径已清理);② `[CALC-T]/[IMP-T]` 等 fprintf 诊断日志(定位已完成,建议清理;`[SCROLL]/[UIHIDE]` 有线上价值保留)
+- **旧独立进程方案已清理 (2026-08-17)**:source/ 目录、NovaLibreOfficePlayerDeprecated target、NovaLibreOfficePlayer.vcxproj、PptAnimationManagerLinux/LibreOffice(零实例化, PptCoreExport 全走新链/图片模式)、sln 工程引用、孤儿可执行 全部删除(git 可恢复)。Windows 侧为文本对应清理(CMake/sln/vcxproj),**需 Windows 编译确认**。ShareMemoryReaderLinux/NamePipe* 为 PDF 链/公共设施,保留
+- 已知待清理:① ~~calc profile seed 死开销~~(已清, 2026-08-17);② ~~[CALC-T]/[IMP-T] 等诊断日志~~(已清, 2026-08-18 日志体系统一:前缀/级别/单入口,见上条;[CalcLink.Scroll]/[Common.UIHide] 转入 debug 级,ORT_LOG_LEVEL=debug 可见);③ ~~过时探针~~(已清, 2026-08-18: calc 系旧 ABI/uno 系/注入 txt 等 22 文件,探针目录缩至 9 个全登记)
+- **writer_cache 总量回收已落地(2026-08-18,简单策略)**:写入后总量超限(ORT_WRITER_CACHE_MB,默认 500MB)按 mtime 最旧删除,排除当前会话文件;实测 1MB 上限 3 文档触发淘汰正常
 - 诊断开关:ORT_DUMP_WINDOWS=1(窗口树/重叠/边缘像素);ffplay video_open 打印 renderer 后端
 
 ---
@@ -197,7 +164,7 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 | 19 | **弯路勿重走**:① gst 环境变量禁 GL 在 1.16.3 无效(rank 不变)② 卸载 gl 包不解决挂起(挂起=渲染失败非 GL)③ LD_PRELOAD 拦截不可靠 ④ VirtualGL/离屏 GL 均不可行 ⑤ ffplay 软解可行(定论基础) | 08-12 | 高 |
 | 19b | **Xvfb 恒无 GPU,媒体渲染固定软件路径,不做动态决策**(与经验 21/37 同哲学) | 08-12 | 高 |
 | 19d-g | **注入探索历程(已被 29/30 取代)**:UNO_SERVICES 同名替换机制源码级确认但未采用;unorc 注入路径 VCL abort 已规避(SDK 模式+独立 service 名+环境变量开关为最终方案);ffplay 编译参数(bear 提取 gstplayer 编译命令)与坑(WeakImplHelper1/component_getImplementationEnvironment/rdb environment="gcc3")沉淀于 19g | 08-12 | 中 |
-| 20 | **幻灯片属性对齐旧方案**:IsEndless=true 循环保活等,与 source/Communicator.cpp 一致 | 08-12 | 高 |
+| 20 | **幻灯片属性对齐旧方案**:IsEndless=true 循环保活等(语义源自旧独立进程方案, 2026-08-17 已清理, git 历史可查) | 08-12 | 高 |
 | 21 | **GL 转场必崩(独立于媒体)**:X11 generic 平台无条件 supportsOpenGL=true→ogltrans→EGL/swrast 崩。修复=SAL_DISABLEGL=1(EnsureKernel setenv,勿回退;转场退化为 CPU 渲染效果保留) | 08-13 | 高 |
 | 26 | **窗口黑边/瞬态/串流三层**:① user 配置窗口状态→全屏瞬态根源(结构修复:窗口属性配置 1920x1080 同 Calc)② 旧 user UI 残留 23px 黑边→UNO 动态隐藏(setMenuBar(null)+hideElement,不依赖 user 配置)③ LO 窗口固有 3px 边框不可控(接受)。UNO setPosSize/visible-toggle 在 slideshow 运行中会黑屏,勿用。诊断:DumpWindowEdges/CheckWindowOverlap(ORT_DUMP_WINDOWS=1) | 08-13 | 高 |
 | 27 | **播放内核独立 profile ~/.office-link/player**:与任何默认 profile 的 soffice 彻底隔离(经验 22);部署 office/user 不再被写 | 08-13 | 高 |
@@ -222,8 +189,7 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
-| 38 | **writer 渲染方案可行性(2026-08-17 探针实测)**:**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。**接口细节(落地直接复用)**: ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用); ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden); ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面); ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头。**性能实测**(pdf_render_probe, build_probes.sh 已登记): 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s); NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)。**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转。**落地决策(2026-08-17 讨论定稿, 二轮修订)**: ① 不做懒转换(保留优化空间); ② 内存 = 按需渲染 + 当前页±2 LRU 缓存(渲染 19-72ms/页, 按需足够); ③ **PDF 缓存键 = 源文件 MD5**(修订: 原 SHA-1, 为与 /tmp/NPOfficeCache 统一——一次计算双向兼容): 转换前先查 `/tmp/NPOfficeCache/<md5>.pdf`(Nova 缩略图链产物, GlobalDataSet::DoConvertDocumentW, 外部 soffice+独立 profile convertuser/<md5> 用后清), **命中总是拷贝**到 `~/.office-link/writer_cache/<md5>.pdf`(/tmp 易失+免疫外部清理; 总量上限最旧回收, 大文件阈值等优化空间保留); 未命中才自转(同内核 storeToURL), 写 writer_cache(`<md5>.pdf.<pid>.tmp` → rename 原子, 并发同播无冲突); 命中/自转后播放链直接 draw_pdf_Import(**跳过 docx 加载+转换**, 90 页场景 9s→~6.2s; draw_pdf_Import 为进程内对象, 跨会话不可缓存 = 命中后成本下限); `_N.pdf` 后缀是缩略图页版(Windows PageRange; **Linux 分支无滤镜实际全量**, 实测与主文件同字节)——writerlink 只认无后缀全量版。**反向协同不做(Nova 缩略图链不查 writer_cache)——依赖方向纪律: writerlink 定位为 NovaOfficeCore 插件, 依赖必须单向(上层→下层), 上层感知下层缓存即反向耦合**; ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式(**经验 39 已改: 三参 bootstrap 统一 link_utils::BootstrapSession, 桌面名为空**); ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)。**上层接线(2026-08-17 二轮定稿)**: ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 测试期**无视传入 mode 一律走新链**(单常量开关), 全链路(demo)测试通过后回切默认 PDF 链(WordManager, 不动), LibreOfficeWriterManager 作为 mode 可选的**备选方案**提交; NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰)。**落地状态 (2026-08-17)**: CORE-WORD 探针全链路验证通过后**已回切默认 PDF 链**, LibreOfficeWriterManager 源码保留仓库不编译 (用户定调: 功能保留不上线); 枚举值 WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3 保留在 NovaPlayer 侧 | 08-17 | 高(实测) |
-| 39 | **双平台整合(2026-08-17, Linux 重构后首次 Windows 编译+冒烟, 高=实测)**: 单一构建树双平台 —— 顶层 CMakeLists 平台分支化 (Windows 跳过 X11/office_runtime/ffplay/旧 exe, 旧 exe 仍由 vcxproj 维护), `cmake -S . -B build_win -A x64` 双平台同一入口同一依赖图 (经验 31 哲学; 此前 Windows 无入口, 经验 32 平台归组后 per-module 配置已无法编译)。**四项统一**: ① **OfficeLog 平台归位**: Linux 实现唯一在 office_runtime.so (单例防双写, 不动); Windows 实现进 common (win_office_log.cpp, 每 link 一份简单文件日志) —— 声明统一 log.h, 调用点零差异; ② **EnsureKernel 契约补全**: WindowsPlatform 内完成三参 bootstrap (link_utils::BootstrapSession: soffice 目录+独立 profile+桌面名), profile seed (office\user UI 隐藏模板) 下沉 PrepareEnvironment —— 三个会话的 `#ifdef _WIN32` 引导块全部消失, 统一 `ctx_ = platform_->EnsureKernel()`; Linux per-instance profile seed 死开销随之消除 (原待办①), Linux GetProfileDir 清理; ③ **路径命名空间 office_paths.h** (header-only inline: office_runtime 不链 common 的约束下唯一零依赖共享方式): Linux ~/.office-link 不变, Windows 统一 %LOCALAPPDATA%\office-link 全 Local (原 profile Roaming/缓存 Local 分裂), profiles/<link>/<guid> 子目录, ORT_HOME 覆盖, 输出统一正斜杠; NPOfficeCache 不属本命名空间 (上层缓存, 依赖单向纪律); ④ **writer Windows bootstrap 无参 → 三参** (经验 38④ 决策落地, 桌面名为空=离屏)。**坑(双平台编译才暴露)**: ① windows.h `FindWindow` 宏 (→FindWindowA) 与 LinkPlatform 接口成员同名 (经验 32 FindCalcWindow 重命名引入) → #undef FindWindow; ② MSVC 无 /utf-8 时 UTF-8 中文注释被 GBK 码页误读 (尾字节 0x5C 吞换行 → C2059 伪语法错) → 顶层统一 /utf-8 /EHsc + _CRT_SECURE_NO_WARNINGS; ③ C ABI 路径契约 = UTF-8 (冒烟探针 wmain 转 UTF-8; ANSI argv 中文 → mojibake → type detection failed); ④ writer Destroy 不 terminate 独立 soffice → 进程残留 (386MB/会话, 实测) → 补 desktop_->terminate() (calc/impress 同款)。**冒烟探针**: probe_win/win_smoke_probe (LoadLibrary+导出符号+Create/控制/Destroy, 五段 CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT 全过, 进程零残留; 对偶 Linux build_probes.sh); 样例 make_samples.py 生成最小合法 xlsx (3 sheet 60 行) / docx (8 页); 实测 (全屏修复后): calc 3 sheets 帧 @3840x2160 (~9-12fps, bitblt 默认后待 demo 数据), writer 转换 376ms→缓存命中 0ms 帧 @834x1080, impress 26 页全屏放映帧 @3840x2160。**writerlink Windows 链 common** (共享工具, 静态库按需取对象, 平台层不落地)。**坑⑤(2026-08-17 demo 实测)**: Windows 窄字符文件 API (fopen/ifstream/窄 filesystem) 按 ANSI 码页解释路径, **UTF-8 中文路径打不开** —— C ABI 契约是 UTF-8, writer 原生文件操作 (md5/复制/重命名/exists/建目录) 全部走宽路径 (U2W + std::filesystem wstring); UNO 管线 (osl::FileBase) 不受影响。demo 首次实测: 中文文件名 docx md5 failed → Create 失败 → NovaPlayer WordInstance::Init 失败路径 UnInit→Stop→join 崩溃 (NovaPlayer 侧次级问题) → soffice 孤儿进程残留 (Windows 无 CleanupOrphanSoffice, 部署稳健性待办)。**坑⑥(2026-08-17 demo 实测, 三层根因)**: menubar 未隐藏被截屏。① `LayoutManager::isElementVisible` 对未就绪元素**恒 false 误报** (Windows) → hideElement 曾被跳过 (改无条件+重试后仍无效, 排除); ② **窗口创建顺序** (git a21f5f67 原版对比): VCL 窗口在 `setVisible` 时按当时形态创建, Linux 重构改成 "setVisible → FindWindow → 放大" 后 setMenuBar(null) 无效; 修复: Windows 分支恢复原版顺序 (先 FindWindow+SetWindowPos, 再 setVisible), Linux 分支不动 (Xvfb 语义); ③ **真根因 (诊断日志证实)**: `WindowsPlatform::SizeWindowToSlot` 是**空实现返回 false** —— 窗口从未被放大/改 style, 保持默认形态 (带标题栏, 容器 pos y=40) → setMenuBar 无效; **修复: SizeWindowToSlot 实现为 SetWindowSize (Windows 无 slot, 落位=全屏无边框)** —— 修复后容器 pos=0,0 size=3840x2160 ✓。诊断手段: [WIN-W] FindWindow/SetWindowSize 日志 (窗口身份/style/客户区) + [UIHIDE] before/after setMenuBar 容器 posSize (y=40 = 标题栏残留的判据)。**calc 已修复并经 demo 确认** (菜单栏隐藏生效); **impress 窗口化形态问题已由全屏放映方案取代** (IsFullScreen=true, LO 自管全屏窗口, 无菜单栏/标题栏, 见 3.2 impress 专项完成状态)。另: 探针 (console 进程) PrintWindow/BitBlt 抓到空白内容 (窗口正确/可见/抓取成功), demo 环境正常 —— 探针环境差异待查, UI/画面验证以 demo 为准。 | 08-17 | 高(实测) |
+| 38 | **writer 渲染方案可行性(2026-08-17 探针实测)**:**方案 A(自治 PDF, 采用)**: docx → PDF → PDF 导入 Draw → 逐页 XSlideRenderer::createPreview → XBitmap::getDIB → BGRA。全链路 UNO 公开接口, LO 自治零第三方(mupdf/poppler 均不需要); 不需要 Xvfb/窗口/抓帧(纯离屏渲染) —— 契合"不用截屏和虚拟屏"与"内核稳定优先"。**接口细节(落地直接复用)**: ① 转 PDF 用 `XStorable::storeToURL(url, {FilterName="writer_pdf_Export"})`(**XModel 无 storeToURL**; 同内核内转换, 不需要外部 --convert-to 进程, 独立 profile 隔离仍适用); ② PDF 导入 `loadComponentFromURL(pdf, FilterName="draw_pdf_Import")`(Hidden); ③ `XSlideRenderer` 服务名 `com.sun.star.drawing.SlideRenderer`(实现 com.sun.star.comp.Draw.SlideRenderer, sd/source/ui/presenter/SlideRenderer.cxx), `createPreview(XDrawPage, awt::Size(宽,高), superSample)` → `awt::XBitmap` —— 输出尺寸按页面比例适配(竖版 A4 @1080 高 → 763x1080, 完整页面); ④ `XBitmap::getDIB()` 返回 **BMP 文件格式**(非裸 DIB!): 'BM'(0-1) + 像素偏移(10-13=0x36=54) + BITMAPINFOHEADER(biWidth@18, biHeight@22, biBitCount@28=24bpp) + 行对齐 4 字节 —— 解析陷阱, 按 offset 10 的像素偏移取值, 勿假设 40 字节头。**性能实测**(pdf_render_probe, build_probes.sh 已登记): 戴奥良-简历.docx(1页): 转换 102-113ms + 导入 217-264ms + 首渲染 81ms(总 ~0.5s); NovaPlayer概要设计说明书.doc(90页): 转换 ~2.9s + 导入 ~6.1s + 逐页渲染 19-72ms/页(总首开 ~9s, 一次性); 翻页 20-70ms/页(翻页语义足够)。**方案 B(直接渲染 XRenderable)排除**: Writer 文档 `XRenderable::getRendererCount=0` —— XRenderable 是导出器基础设施(PDF 导出内部用, filter/source/pdf/pdfexport.cxx), UNO 公开层 render 的 xOptions 是导出选项, 无位图输出路径。**探针坑**: 中文路径必须 `OStringToOUString(UTF8)`(createFromAscii 损坏→mojibake→type detection failed); LO type detection 依赖 LANG(经验 25 陷阱, 探针 setenv 兜底)。**writer link 设计**: C ABI 同构 calc/impress, 复用 office_runtime 内核/BootLock; **无平台层**(不需要 LinkPlatform); 页表 = Draw 文档 XDrawPages, 翻页 = createPreview 当前页; 大文档首开 9s 的优化方向: 转换缓存/后台预转。**落地决策(2026-08-17 讨论定稿, 二轮修订)**: ① 不做懒转换(保留优化空间); ② 内存 = 按需渲染 + 当前页±2 LRU 缓存(渲染 19-72ms/页, 按需足够); ③ **PDF 缓存键 = 源文件 MD5**(修订: 原 SHA-1, 为与 /tmp/NPOfficeCache 统一——一次计算双向兼容): 转换前先查 `/tmp/NPOfficeCache/<md5>.pdf`(Nova 缩略图链产物, GlobalDataSet::DoConvertDocumentW, 外部 soffice+独立 profile convertuser/<md5> 用后清), **命中总是拷贝**到 `~/.office-link/writer_cache/<md5>.pdf`(/tmp 易失+免疫外部清理; 总量上限最旧回收, 大文件阈值等优化空间保留); 未命中才自转(同内核 storeToURL), 写 writer_cache(`<md5>.pdf.<pid>.tmp` → rename 原子, 并发同播无冲突); 命中/自转后播放链直接 draw_pdf_Import(**跳过 docx 加载+转换**, 90 页场景 9s→~6.2s; draw_pdf_Import 为进程内对象, 跨会话不可缓存 = 命中后成本下限); `_N.pdf` 后缀是缩略图页版(Windows PageRange; **Linux 分支无滤镜实际全量**, 实测与主文件同字节)——writerlink 只认无后缀全量版。**反向协同不做(Nova 缩略图链不查 writer_cache)——依赖方向纪律: writerlink 定位为 NovaOfficeCore 插件, 依赖必须单向(上层→下层), 上层感知下层缓存即反向耦合**; ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式; ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)。**上层接线(2026-08-17 二轮定稿)**: ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 实际落地为**正式 mode 分发**(比原计划更进一步): WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3 走新链, 其余走 WordManager(PDF 链, 不动); 上层 Manager 方案(IWordManager/LibreOfficeWriterManager)为临时验证形态暂不提交, 提交形态待定; NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰)。**质量收尾(2026-08-17 三轮)**: ⑦ **UpdateFrame 已修**: 原实现只置标志等轮询, Stop 后轮询线程已停→标志无人消费→"停止后取一帧"黑屏(writer_probe 复现 frames=0); 现锁内直接 PushFrame(语义对齐 impress); ⑧ **LO 统一尺寸认知(draw_pdf_Import)**: 混合页面尺寸 PDF(横竖混排实测 612x792/842x595/595x842)导入 Draw 后**所有页统一为第一页尺寸**, createPreview 全部同尺寸输出(834x1080)——"缓存命中不刷新 width_/height_ 的错配前提不存在"(per-page 尺寸处理不需要); writer_probe 的 WRITER_MIXED 段留作回归锚点(LO 行若变会 FAIL 提醒); ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查); ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露) | 08-17 | 高(实测) |
 
 ## 三、项目规划
 
@@ -233,11 +199,8 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
-| ~~★★★~~ | ~~writer 模块核心交付~~ → **已完成 (2026-08-17)**: writerlink 全链路验证通过 (Linux 底层 + Windows CORE-WORD 探针); **NovaOfficeCore 接线已还原不上线** (用户定调: 功能保留, 默认 PDF 链; 上线时按 WordCoreExport.cpp 头注释恢复) | 完成(待上线决策) |
-| ★★★ | **calc/writer/impress Windows 回归**(2026-08-17 编译+冒烟已过):Calc 功能回归 ✓ → writer 全链路 ✓ (不上线) → impress 细节验证 (probe_win/win_smoke_probe 为冒烟基础, 可扩展为回归) | 双平台整合后续 |
-| ~~★★~~ | ~~calc_session Linux 下 profile seed 死开销~~ → **已消除**(经验 39: seed 下沉 WindowsPlatform, Linux 不再执行) | 完成 |
-| ~~★★~~ | ~~NovaOfficeCore word 上层接线~~ → **已还原 (2026-08-17)**: 验证完成 (CORE-WORD 全链路 PASS) 后用户定调不上线 —— 默认 PDF 链, LibreOfficeWriterManager 源码保留不编译 (#if 0 + CMake/vcxproj 移除), 恢复指引见代码注释 | 完成(不上线) |
-| ~~★★~~ | ~~NovaOfficeCore 三 manager void* 句柄 GetProcAddress HMODULE 转换~~ → **已修** (2026-08-17) | 完成 |
+| ★★★ | **writer 模块**(方案已定稿, 经验 38):writerlink.so 自治 PDF 位图管线(无平台层/无窗口),含 PDF 内容缓存与按需渲染 LRU;C ABI 同构 calc/impress | 核心交付 |
+| ★★ | calc_session Linux 下 profile seed 死开销(每次 Create 复制整个 office/user 但 Linux 不消费;Windows bootstrap 才用)| 注释审查发现,讨论后改 |
 | ★★ | 诊断日志清理:[CALC-T]/[IMP-T] 等 fprintf(定位已完成);[SCROLL]/[UIHIDE] 保留 | 收尾 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
@@ -246,15 +209,11 @@ cd NovaLibreOfficePlayer && cmake -S . -B build_win -A x64 && cmake --build buil
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
-| ★★ | ~~impress Windows 全屏放映~~ → **已完成 (2026-08-17 探针+demo 实测)**: IsFullScreen=true (source/Communicator.cpp:862 同款属性集), 放映窗口定位 = SALTMPSUBFRAME + "Presenting: " 标题 (旧项目验证方案, FindPresentationWindow 优先+最大面积回退), 实测 cls=SALTMPSUBFRAME title="Presenting: PPT..." client=3840x2160 style=0x94000000 (无 WS_CAPTION) vis=1, 抓帧有内容 (幻灯片渲染) 帧流正常; 移除 Windows 侧 SizeWindowToSlot (LO 自管全屏); demo 确认翻页正常。**白帧修复**: 翻页动画白帧 = GL 转场渲染抓不到 (Linux 经验 21 同款) → SAL_DISABLEGL=1 → demo 白帧消失。**2160p 帧率**: 见下方"2160p 抓帧帧率"待办 (bitblt 已默认, 不再优化)。**SetResolution 语义待优化** (全屏=桌面分辨率, 缩窗被 LO 忽略, 低优先级) | 完成 |
-| ★ | 平台特性整合 (低优先级): Windows impress 全屏放映 vs Linux slot 方案的平台差异收进平台层/会话分支; 当前 calc/impress 的 Windows 分支逻辑 (窗口顺序/落位/隐藏) 与 Linux 分支已分居 #ifdef, 待 impress 全屏方案定稿后统一整理 | 待办 |
-| ★ | 2160p 抓帧帧率 (2026-08-17 定调): **bitblt 已默认** (读 GDI 表面, 绕过 PrintWindow 全量重绘; 日志首次抓帧留痕 mode, 环境变量 ORT_CAPTURE_MODE=printwindow 可回退); **不再做降分辨率优化**; 若后续帧率实测不达标再议 (方向: 窗口化+窗口设目标分辨率 / 抓帧后缩放) | 待办 |
 | ★★ | 2160p 混合分辨率落位产品化验证(默认配置已支持) | 配置验证 |
 | ★★ | slot 管理策略(超限语义/动态轮替/最大并发数) | 策略决策 |
-| ★★ | 废弃 source/ 旧方案(target 已标 Deprecated) | 收尾 |
-| ~~★~~ | ~~Windows impress 平台补全 + Windows 编译验证~~ → **已完成**(经验 39: 工厂 stub 补齐 + 三 link 编译+冒烟全过) | 完成 |
+| ★ | Windows impress 平台补全(当前 stub)+ Windows 编译验证(含 2026-08-17 清理后的 CMake/sln 文本改动) | 平台补全 |
 | ★ | 环境自检(字体/音频缺失明确报错)与崩溃检测告警 | 部署稳健性 |
 
 ---
 
-*已关闭:gstreamer 路径清理(08-14);LO 改动同步远端(08-17,commit 83e0b9c3e);ffplay 多实例并行播放(08-17,经验 37);office_runtime 防御增强与单测加固(08-17,经验 35);双平台整合与 Windows 编译冒烟(08-17,经验 39);Calc Windows 回归与菜单栏隐藏修复(08-17);impress Windows 全屏放映与白帧修复(08-17);NovaOfficeCore ppt 接线(08-17);writer 接线验证后还原不上线(08-17)。*
+*已关闭:gstreamer 路径清理(08-14);LO 改动同步远端(08-17,commit 83e0b9c3e);ffplay 多实例并行播放(08-17,经验 37);office_runtime 防御增强与单测加固(08-17,经验 35);**废弃 source/ 旧方案**(08-17,零实例化实证后全平台清理,1.6);writer UpdateFrame 语义修复(08-17,经验 38⑦)。*
