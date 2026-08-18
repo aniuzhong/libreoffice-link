@@ -11,8 +11,7 @@
 ### 1.1 架构
 
 ```
-NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: NovaLibreOffice-
-  │                        PlayerDeprecated(旧独立进程方案,待废弃)/OfficeRuntime/
+NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: OfficeRuntime/
   │                        CalcLink/ImpressLink/FFplay/WriterLink)
   ├── common/              基础层 (零依赖 office_runtime)
   │     link_platform.h   LinkPlatform 统一平台接口 (工厂: CreateCalc/ImpressPlatform)
@@ -242,7 +241,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
-| 40 | **user 模板机制 + office-link 命名定稿**:UI 控制三层优先级 / 命名 / 模板净化 / 消费语义 / 孤儿文档锁坑。详见下方 [经验 40 详述](#经验-40-详述) | 08-18 | 高(实证) |
+| 40 | **user 模板机制 + office-link 命名定稿**:UI 控制三层优先级 / 命名 / 模板净化 / 消费语义 / 孤儿文档锁坑 / sidebar+statusbar 存储位置与部署陈旧坑(⑦⑧)。详见下方 [经验 40 详述](#经验-40-详述) | 08-18 | 高(实证) |
 | 38 | **writer 渲染方案可行性**:docx→PDF→Draw→XSlideRenderer→BGRA 全 UNO 自治 / 接口细节 / 性能 / 缓存 / 上层接线 / 质量收尾。详见下方 [经验 38 详述](#经验-38-详述) | 08-17 | 高(实测) |
 
 #### 经验 40 详述
@@ -251,10 +250,17 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
 - ① **UI 控制三层优先级(定论)**: UNO API > 平台窗口 API(X11/Win32) > user 模板配置 — 单一层做不到完全控制, 模板是基线兜底不承担运行时控制; Windows 的 per-session fresh copy 正是该层配套防御(运行期写回的 UI 状态不跨 session 存活)
 - ② **命名**: Linux `~/.office-link/xvfb/`(内核跑在 Xvfb 上, 名字直指机制; 原 player/ 更名, 运行时数据无迁移负担)、Windows `desktops/<link>/<guid>/`(每 session 独立桌面); office_paths: `xvfb_profile()/desktop_profile()/user_template()`
-- ③ **模板 = 仓库 `templates/user/registrymodifications.xcu` 单文件**(126→66 item 净化: 保留 3 工具栏 Visible=false+Locked/TabBarVisible=false/SlideSorterBar 按视图/Misc.Start 放映 4 条/Sidebar ContextList 10 条/FirstRun=false/两个 Factory 窗口属性=固定值 `10,1,1920,1080;1;,,,;`(原值机器相关 3725x1992, 模板须跨机器); 剔除: 最近文件/Recovery/绝对路径/时间戳/Linguistic/ooLocale(让环境决定)/默认值写回约 60 条)。构建随 OfficeRuntime 部署到 office/program/templates/
+- ③ **模板 = 仓库 `templates/user/registrymodifications.xcu` 单文件**(126→66→69 item 两轮净化: 第一轮 66 条(保留 3 工具栏 Visible=false+Locked/TabBarVisible=false/SlideSorterBar 按视图/Misc.Start 放映 4 条/Sidebar ContextList 10 条/FirstRun=false/两个 Factory 窗口属性=固定值 `10,1,1920,1080;1;,,,;`(原值机器相关 3725x1992, 模板须跨机器); 剔除: 最近文件/Recovery/绝对路径/时间戳/Linguistic/ooLocale(让环境决定)/默认值写回约 60 条), 第二轮 +3 条补 sidebar/statusbar(见⑦)); 构建 POST_BUILD 随 OfficeRuntime 部署到 office/program/templates/
 - ④ **消费语义双平台统一**: 引导/会话创建时 fresh copy(回模板基线), Linux `SeedKernelProfile`(EnsureKernel 引导前; **活内核防护**: cmdline 含 soffice.bin+该 profile 的进程活着时跳过 — 跨进程共享内核复用路径绝不能删正在运行的内核的 profile), Windows 平台层 seed(office/user 退役)
-- ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20
+- ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20; **2026-08-18 用户 demo 肉眼验收: UI 全部隐藏(工具栏/TabBar/sidebar/statusbar), 编辑视图残留治理闭环**
 - ⑥ **孤儿文档锁坑(新)**: 用户 UI soffice 会话退出后 `.~lock.<doc>#` 残留(锁跨 profile 生效!)→ 播放链 Hidden 加载返回空组件("doc loaded FAILED"), 表现为"任何 profile/模板配置下都失败" — 排查先查文档同目录锁文件; 2026-08-18 实测差点误判为模板回归
+- ⑦ **sidebar/statusbar 的真实存储位置(2026-08-18 定位, 模板第二轮 +3 条的依据)**:
+  - **Sidebar(View>Sidebar, Ctrl+F5)不是 LayoutManager 元素** — SFX 子窗口, SID_SIDEBAR = SID_SVX_START(10000)+336 = **10336**(sfx2/source/sidebar/SidebarChildWindow.cxx `SFX_IMPL_DOCKINGWINDOW_WITHID(SidebarChildWindow, SID_SIDEBAR)`), 持久化在 `/org.openoffice.Office.Views/Windows` 的 **`WindowType['simpress/10336']`** 节点(2 item: UserData + WindowState)。序列化是整条路径进 `oor:path=`, **grep `oor:name="simpress/10336"` 查不到**(审计时易误判缺失)
+  - **Statusbar 不在 toolbar 命名节点** — `/org.openoffice.Office.UI.ImpressWindowState/UIElements/States` 直项内嵌 `<node oor:name="private:resource/statusbar/statusbar">` Visible=false; 白名单规则若要求路径含 `resource/toolbar/` 会漏掉它(第一轮净化就这么丢的)
+  - **UNO 自省盲区**: LayoutManager.isElementVisible 对 SFX 子窗口(sidebar)报 0 而像素仍在(hideElement 对它不生效/无意义) — UI 自省不能完全反映真实布局, 肉眼是最终裁判(用户定论); 这两个元素的**有效控制层 = 模板**(三层优先级里的第三层在此场景反而是唯一起效的)
+  - 模板再净化(用户从 UI 重新配置再提取)时的保留规则: 上述两条的位置匹配必须保留(States 直项路径精确匹配 + `simpress/10336` 内容匹配), 否则重新丢条目
+- ⑧ **模板部署陈旧坑(2026-08-18 实测踩过)**: 仓库模板更新后 office/program/templates/ 部署副本仍是旧的(上次构建早于模板编辑) → Linux seed 用部署副本, 运行时 profile 一直缺条目, 症状="模板明明加了配置但不生效"。**规则: 改 templates/user 后必须重建 OfficeRuntime(POST_BUILD 拷贝)或手动 cp, 并 diff 确认部署副本一致**; 排查 UI 不生效先核对三方(仓库模板/部署副本/运行时 profile)条目数
+- ⑨ **活内核 seed 跳过的验证姿势**: SeedKernelProfile 的活内核防护(cmdline 匹配跳过)意味着**改模板后若内核还活着, 新配置不生效** — 需确保 soffice 重启(探针退出会 atexit 停内核; demo 常驻进程需重启)
 
 #### 经验 38 详述
 
@@ -307,8 +313,8 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
-| ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(IWordManager 抽象 + LibreOfficeWriterManager 分发, 样板已保留)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
-| ★★ | calc_session Linux 下 profile seed 死开销(每次 Create 复制整个 office/user 但 Linux 不消费;Windows bootstrap 才用)| 注释审查发现,讨论后改 |
+| ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
+| ★★ | **经验 42 FramePoller 治理落地**:立即项(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(FramePollerBase) | 分析已完成 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
 
@@ -318,7 +324,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 |---|---|---|
 | ★★ | 2160p 混合分辨率落位产品化验证(默认配置已支持) | 配置验证 |
 | ★★ | slot 管理策略(超限语义/动态轮替/最大并发数) | 策略决策 |
-| ★ | Windows impress 平台补全(当前 stub)+ Windows 编译验证(含 2026-08-17 清理后的 CMake/sln 文本改动) | 平台补全 |
+| ★ | Windows impress 平台补全(当前 stub)+ Windows 编译验证(含 2026-08-17 清理后的 CMake/sln 文本改动)+ win_platform seed 的窄字符 fs 调用 u2w 化(中文用户名路径风险, 与 md5 原问题同源, 2026-08-18 检视发现属遗留非新引入) | 平台补全 |
 | ★ | 环境自检(字体/音频缺失明确报错)与崩溃检测告警 | 部署稳健性 |
 
 ---
@@ -330,6 +336,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - 代码重构(link_utils 工具整合/DEFER/UNO_GUARD/异常日志补全/SYS_gettid 可移植)
 - **Impress 暂停→恢复翻页失效**(经验 41, 实测修复)
 - **FramePoller 共性分析**(经验 42, 待实施)
+- **UI 隐藏收官**(经验 40⑦-⑨): sidebar/statusbar 模板条目补齐(66→69)+ 部署副本同步(踩部署陈旧坑), demo 肉眼验收全部隐藏; 重构检视+全量重建+单测 50/50+探针回归全绿
 
 **2026-08-17:**
 - LO 改动同步远端(commit 83e0b9c3e)
