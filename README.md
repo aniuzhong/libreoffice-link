@@ -106,9 +106,9 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 - **媒体后端**:默认 ffplay(`ORT_MEDIA_BACKEND`,EnsureKernel setenv 不覆盖宿主);gstreamer 为验证过的回退路径(ximagesink 补丁版 libavmediagst.so 保留;.bak 为补丁前备份)
 - **GL 全禁用**:SAL_DISABLEGL=1(转场,经验 21)+ ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——Xvfb 恒无 GPU,一切渲染固定软件路径
-- **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[Common]`(子场景点分如 `[CalcLink.Scroll]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),保留独立 fprintf + `[FFPLAY]`。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**——仅跳过初始化时 spdlog 默认 logger 仍打 stdout,已修)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准)
+- **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[KernelHost]`(子场景点分如 `[CalcLink.Scroll]`/`[Common.UIHide]`/`[Common.WinWindow]`/`[Common.WinProfile]`/`[Common.X11]`/`[Common.Boot]`);平台层 Tag() 输出 lowercase `[calc]/[impress]`(区分会话层 `[CalcLink]/[ImpressLink]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),保留独立 fprintf + `[FFPLAY]`。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**——仅跳过初始化时 spdlog 默认 logger 仍打 stdout,已修)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准)。**前缀标准化(2026-08-18)**:`[Common]`→`[Common.Boot]`、`[CAPTURE]`→`[Common.WinWindow]`(归入 WinWindow 子域)
 - **所有者退出连坐**:共享内核/屏的所有者进程退出,其他进程会话断开;双实例部署需同时使用
-- Windows:impress stub + win_platform 未编译验证,需 Windows 侧确认
+- Windows:win_platform 新接口(J2)已落地但**未编译验证**,需 Windows 侧确认(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd + calc F 反序 + impress 全屏放映 + writer KernelHost)
 - UNO_PATH/URE_BOOTSTRAP 依赖部署位置(office/program),部署路径变化需同步(经验 23/33)
 - **旧独立进程方案已清理 (2026-08-17)**:source/ 目录、NovaLibreOfficePlayerDeprecated target、NovaLibreOfficePlayer.vcxproj、PptAnimationManagerLinux/LibreOffice(零实例化, PptCoreExport 全走新链/图片模式)、sln 工程引用、孤儿可执行 全部删除(git 可恢复)。Windows 侧为文本对应清理(CMake/sln/vcxproj),**需 Windows 编译确认**。ShareMemoryReaderLinux/NamePipe* 为 PDF 链/公共设施,保留
 - 已知待清理:① ~~calc profile seed 死开销~~(已清, 2026-08-17);② ~~[CALC-T]/[IMP-T] 等诊断日志~~(已清, 2026-08-18 日志体系统一:前缀/级别/单入口,见上条;[CalcLink.Scroll]/[Common.UIHide] 转入 debug 级,ORT_LOG_LEVEL=debug 可见);③ ~~过时探针~~(已清, 2026-08-18: calc 系旧 ABI/uno 系/注入 txt 等 22 文件,探针目录缩至 9 个全登记)
@@ -136,6 +136,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 19c | 会话重建不做:确定性故障重建仍崩;改为崩溃检测+明确告警 | 08-12 | 高 |
 | 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置, 一行修复。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
 | 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + 两个 bug + 性能问题, 修复优先级已排。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(分析完成, 待实施) |
+| 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 3.0 验证记录 | 08-18 | 高(源码级+实测修复) |
 
 #### 经验 41 详述
 
@@ -305,16 +306,78 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查)
 - ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植)
 
-## 三、项目规划
+### 3.0 平台隔离设计验证 (2026-08-18 探针验证)
 
-> ★★★=立即;★★=中期;★=远期。
+#### 验证范围
+按 HANDOFF.md 3.3 平台隔离设计，仅修改 impress 会话层实现平台隔离骨架，不动平台层实现细节。
+
+#### 修改内容
+1. **link_platform.h**: 添加平台隔离设计新接口
+   - `enum class WindowPoint { None, BeforeReveal, AfterReveal, AfterStart }`
+   - `struct SessionPlan` (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy)
+   - `class BootSection` (RAII 引导段串行化)
+   - `LinkPlatform` 新增虚函数: Plan()/BeginBoot()/DiscoverWindow()/FormWindow()/ApplyNativeFullscreen()/OnSessionEnd()
+
+2. **xvfb_platform.h**: 实现 Linux 平台层新接口
+   - `LinuxBootSection` 包装 `OfficeRuntime::BootLock`
+   - `XvfbSessionPlatform::Plan()` 返回 Linux 策略 (discover=AfterReveal, form=AfterStart, fullscreen=false, settle_ms=2500, ui_hide_needed=true, terminate_on_destroy=false)
+   - 新接口复用现有实现 (DiscoverWindow=FindWindow, FormWindow=SizeWindowToSlot)
+
+3. **impress_session.cpp**: 重构使用新接口，清除 `#ifdef __linux__`
+   - Create() 按 P0-P10 协议重构 (平台隔离设计 3.3 C)
+   - Destroy() 使用 OnSessionEnd() 钩子替代 `#ifdef _WIN32` terminate
+   - Start() 清除 Windows 特定代码 (ORT_IMPRESS_FULLSCREEN 处理待平台层实现)
+   - 删除 UI 自省诊断代码 (移到可选)
+
+#### 验证结果
+- ✅ **编译通过**: 所有 target 编译成功
+- ✅ **单测通过**: office_runtime_test 50/50 全绿
+- ❌ **探针验证失败**(初版): impress_nextpage_probe 和 media_green_probe 卡死在 BootLock::Lock() —— **已定位为双重加锁并修复, 复跑全绿**(见根因分析/经验 43)
+
+#### 遇到的问题
+**BootLock 死锁**: 探针在输出 `[impress] Plan: discover=2 form=3 fullscreen=0 settle_ms=2500 ui_hide=1 terminate=0` 后卡死，日志显示 BootLock::Lock() 被调用但未返回。
+
+#### 根因分析 (2026-08-18 修订, 双重加锁实锤)
+**真根因**: `OfficeRuntime::BootLock` 的**构造函数本身即执行 `Lock()`**
+(office_runtime.cpp:561-564)。LinuxBootSection 以成员形式持有 BootLock
+(成员构造时已持锁), 构造函数体又调了一次 `boot_lock_.Lock()` → 同线程对
+`static std::mutex s_proc_mutex` 二次 lock → **非递归 mutex 立即自死锁**。
+佐证: 卡死无任何日志(进程内 mutex 路径无日志); 60s 信号量强超时不起作用
+(超时只在 sem 等待路径)。**不是"RAII 包装有风险", 是忽略了一个隐蔽契约。**
+修复: 构造函数 `= default`(一行), 成员构造即持锁, 勿再手动 Lock。
+~LinuxBootSection → Release() 与成员析构的双重 Unlock 安全
+(Unlock 幂等: sem_ 置 SEM_FAILED / mtx_ 置 nullptr 后再调为 no-op)。
+
+#### 经验编号: 43
+**BootLock 构造即加锁 + 非递归 mutex 自死锁 (2026-08-18)**: `BootLock` 构造函数
+= Lock(), 析构 = Unlock()。包装它的 RAII 类**不得在构造函数体再调 Lock()** ——
+同线程二次 lock 非递归 mutex 立即永久死锁, 无日志、不受 60s 信号量超时保护
+(超时只在跨进程 sem 路径), 极易误判为"包装本身有风险"。判别特征: 卡死点静默
+无输出。一般化教训: **包装"构造即获取"型 RAII 资源时, 包装层构造函数必须为空**;
+若资源只有显式 Lock 形态, 包装层才负责调 Lock。修复后探针复绿
+(impress_nextpage / media_green 全过, 2026-08-18 19:18)。
+
+#### 设计验证结论 (2026-08-18 修订)
+**平台隔离设计骨架验证成功**:
+- ✅ 接口设计合理, 编译通过 (SessionPlan/WindowPoint/BootSection/新虚函数全落地)
+- ✅ SessionPlan 数据驱动机制正常工作 (plan 日志可观测)
+- ✅ 协议 P0-P10 逻辑正确 (Release 绑定点 = P5 后, 与原 Unlock 位置语义一致)
+- ✅ 死锁为包装实现踩契约 (经验 43), 一行修复; **设计本身无需返工**
+- ✅ impress 会话层 `#ifdef` 清零, 探针 impress_nextpage/media_green 复绿
+
+**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。待 Windows 侧编译/探针回归。
+
+---
 
 ### 3.1 待办/讨论
+
+> ★★★=立即;★★=中期;★=远期。
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
 | ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
 | ★★ | **经验 42 FramePoller 治理落地**:立即项(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(FramePollerBase) | 分析已完成 |
+| ★ | **平台隔离 Windows 侧回归**(设计见 3.3, 已全量实施):Linux demo 回归通过 (calc/impress);待 Windows 侧编译 + 探针回归 (win_platform 新接口 / calc F 反序 / impress 全屏放映 / writer KernelHost) | 3.3 J 全量实施, Linux 已回归 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
 
@@ -329,6 +392,179 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
 ---
 
+### 3.3 平台隔离设计(意图/机制分离)— 已实施 2026-08-18 (J1-J4 全量)
+
+> 背景: 双平台并行开发负担重。UNO 层大体一致(实证: writerlink 零平台层双平台可用),
+> 桌面/窗口层本质分歧(共享内核+Xvfb+slot vs 独立进程+独立桌面)。**分歧不可消除,
+> 但可以安放**。现状诊断(2026-08-18 统计): 平台分支倒挂——本应承载差异的平台层几乎
+> 干净(xvfb_platform 0 处/win_platform 2 处), 本应平台无关的会话层躺着 28 处 `#ifdef`
+> (calc 9 / impress 8 / writer 11)。目标: **会话层零 `#ifdef`**, 单平台开发者的
+> 变更面物理上碰不到对端平台, 微妙细节各有唯一且被编译器守护的家。
+
+#### A. 三原则
+
+1. **隔离意图, 不隔离机制**: 接口抽象的是 what/when(协议与时序), 不抽象 how
+   (XMoveWindow/SetWindowPos/CreateDesktopA/XShm)。统一"窗口 API"是伪泛型——
+   最小公约数会强迫放弃各平台的 workaround, 那才是毁细节的方式。
+2. **不变量构造性执行**: 跨平台禁令不靠注释记性, 靠代码结构让违规不可能
+   (例: 核心层不持有窗口句柄 → "放映中不得 UNO setPosSize"物理上无处发生)。
+3. **变体点可枚举**: 平台间自由度全部收进 plan 数据结构, review 时一眼看清
+   两平台到底差在哪几维, 而不是在 28 处 `#ifdef` 里考古。
+
+#### B. 关键澄清: 两类差异, 只隔离其中一类
+
+- **calc vs impress 的差异 = 文档类型差异** → 允许留在各自会话文件(有无放映段)。
+- **Windows vs Linux 的差异 = 平台差异** → 必须出会话文件, 进平台模块或 plan。
+- 判据: 代码里出现平台名(`_WIN32`/`__linux__`)即是违例; 出现文档类型名是正常。
+
+#### C. 会话协议规格(核心独占, 双平台同一份代码)
+
+```
+里程碑序列 (核心按此顺序执行, 平台工作绑定点由 plan 声明):
+
+  P0  平台工厂 + PrepareEnvironment      (Linux: Acquire/Xvfb/slot; Win: DPI/桌面/profile seed)
+  P1  BeginBoot (BootSection RAII)       — 意图: 并发 Create 引导+加载须串行(经验 5)
+  P2  EnsureKernel → 空 ctx 则 BootstrapSession (calc 已是此形态, impress 待 Windows 落地时对齐)
+  P3  SnapshotWindows + Hidden 加载          — 意图: 引导+加载须串行(经验 5)
+  (BootSection::Release 不在 P3: 见 P5 后注*; 提前释放会 reintroduce 经验 5)
+  *Release 绑定点 = 当前 calc_session.cpp:318 / impress 对应精确位。setVisible(P5)
+   触碰共享内核须串行, Release 须在 P5 之后、首个 discover 之前调用; 提前到
+   P3/SnapshotWindows 之后释放 = 并发 Create 卡死(经验 5)。core 显式调用此点。
+  P4  [W@BeforeReveal]                   ← plan 绑定点 (calc/Win 在此发现+定型, 见 F 用例)
+  P5  setVisible 显露                     — VCL 窗口在此时按最终形态创建
+  P6  [W@AfterReveal]                    ← plan 绑定点 (calc/Linux + impress/Linux 发现)
+  P7  (仅 impress) 放映属性(IsFullScreen=plan) + start + 等 settle_ms + controller+pause
+  P8  [W@AfterStart]                     ← plan 绑定点 (impress/Linux slot 落位; impress/Win 发现放映窗口)
+  P9  HideUiBlock (plan.ui_hide_needed 门控)
+  P10 UpdateFrame 首帧
+```
+
+- 里程碑本身是**共享意图**(顺序即踩坑结论); 每个绑定点是**平台机制**的自由。
+- 失败语义显式: DiscoverWindow/FormWindow 返回 bool, 失败即 Create 失败, 无歧义。
+
+#### D. LinkPlatform 接口定稿形态
+
+```cpp
+// 窗口工作绑定点 (相对核心里程碑; 平台声明白己的窗口工作发生处)
+enum class WindowPoint { None, BeforeReveal, AfterReveal, AfterStart };
+
+// 平台策略声明 (数据, 非代码): 启动时一次性取, 核心原样消费并打日志
+struct SessionPlan {
+    WindowPoint discover;        // 窗口发现绑定点
+    WindowPoint form;            // 窗口定型(落位/样式)绑定点; None = LO 自管(全屏)
+    bool  fullscreen;            // 放映 IsFullScreen (Linux false=窗口化+slot, 经验 1)
+    int   settle_ms;             // start 后形态稳定等待 (Win 实测 1200 不够须 2500)
+    bool  ui_hide_needed;        // 全屏放映 LO 自管则 false
+    bool  terminate_on_destroy;  // 每 session 独立进程才 true
+};
+
+// 引导段 RAII: 构造 = 进入串行区, Release() = 核心在 setVisible(P5) 之后显式调用
+// (早释点本身是协议: "窗口查找可并行", 经验 5; 须等于当前 calc_session.cpp:318,
+//  不得提前到 P3/SnapshotWindows 之后 —— 否则 reintroduce 经验 5 并发崩溃)
+class BootSection { virtual void Release() = 0; ... };  // Linux 真锁 / Win 空实现
+
+class LinkPlatform {
+    // 既有: PrepareEnvironment/EnsureKernel/SnapshotWindows/SetWindowSize/
+    //       CaptureFrame/HideUiFloats/Cleanup (不动)
+    virtual SessionPlan Plan() = 0;
+    virtual std::unique_ptr<BootSection> BeginBoot() = 0;
+    // 契约样例 (接口注释写时机与不变量, 平台实现者读合同不读对端代码):
+    // DiscoverWindow: 在 plan.discover 绑定点被调; 须已 SnapshotWindows。
+    // FormWindow: 在 plan.form 绑定点被调; **放映运行中的窗口几何操作只允许
+    //   发生在此实现内** (UNO setPosSize 运行中黑屏, 经验 26); 允许在隐藏态执行
+    //   (Win 改 style+SetWindowPos 于 setVisible 前定型)。
+    virtual bool DiscoverWindow() = 0;
+    virtual bool FormWindow(int w, int h) = 0;   // 吸收 SizeWindowToSlot
+    virtual void ApplyNativeFullscreen() = 0;    // 能力钩子, 默认空 (Win 快捷键注入)
+    virtual void OnSessionEnd() = 0;             // 能力钩子 (Win terminate; Linux 空)
+};
+```
+
+- 核心代码形态: `if (plan.discover == WindowPoint::AfterReveal) DiscoverWindow();`
+  —— 分支条件是 plan 数据, 不是平台名; 两平台读同一条代码路径。
+- 备选方案(全量里程碑回调 `OnMilestone(m)`, 核心零分支)被否: 契约含糊、
+  失败语义弱(FindWindow 失败须中止 Create), 可枚举 plan 的显式性更值钱。
+
+#### E. 变体点总账(现存每处 `#ifdef` 的归宿)
+
+| 现存位置 | 内容 | 归宿 |
+|---|---|---|
+| impress.cpp:39 / calc.cpp:58 / writer.cpp:17 | include office_runtime | 平台实现文件内(机制) |
+| impress.cpp:77 / calc.cpp:366 / writer.cpp:592 | destroy 时 terminate | `plan.terminate_on_destroy` + OnSessionEnd |
+| impress.cpp:117 / calc.cpp:221 / writer.cpp:117+190 | BootLock+Unlock | BeginBoot RAII + Release(释放点=协议 P3) |
+| impress.cpp:166-175 | 解锁+start 前找窗 | `plan.discover=AfterReveal`(impress/Linux) |
+| impress.cpp:188-211 | IsFullScreen 平台分支 | `plan.fullscreen` |
+| impress.cpp:219 | settle 2500ms | `plan.settle_ms` |
+| impress.cpp:277-289 | start 后 slot 落位 | `plan.form=AfterStart` + FormWindow |
+| impress.cpp:321-333 | Win 窗口化 A/B 兜底 | `plan.ui_hide_needed`;ORT_IMPRESS_FULLSCREEN 逃生门留在 Win 平台内 |
+| calc.cpp:302-309(Win) | reveal 前+找窗+落位+快捷键 | `discover=form=BeforeReveal` + FormWindow 内含快捷键(见 F) |
+| calc.cpp:317-327(Linux) | reveal 后找窗+落位 | `discover=form=AfterReveal` |
+| writer.cpp:35-82 | u2w/to_path/进程 ID | link_utils 机制层(**to_path 应上收 link_utils 三链共用**) |
+| writer.cpp:117-134+606 | Acquire/EnsureKernel/Release | 见 G(writer 引导缝) |
+| calc.cpp:33-45 | windows.h/FindWindow 宏 | 编译机制, 可留(或 os 头收拢) |
+| link_utils.cpp:18/38/75 | GetLinkDir/BootstrapSession/u2w 双实现 | 本职(它就是机制的家), 不动 |
+
+#### F. 最微妙用例: calc 的 Windows 反序(设计容纳力的试金石)
+
+Windows calc **先找窗+定型再 setVisible**(VCL 在 setVisible 时按最终形态创建窗口,
+反序则 menubar 隐藏失效,demo 实测);Linux **先 setVisible 再找窗+落位**。设计下:
+
+- Win plan: `discover=form=BeforeReveal`;Linux plan: `discover=form=AfterReveal`。
+- 核心只在 P4/P5/P6 按各自 plan 调 DiscoverWindow/FormWindow, **同一条代码**。
+- "定型必须在显露前"这条 Win 局部知识, 写在 win_platform 的 Plan() 返回处与
+  FormWindow 实现注释里, 连同 demo 实测记录——Linux 开发者永远不需要知道它。
+
+#### G. writer 的引导缝(可选, 最后做)
+
+writer 无平台层是定案(经验 38④), 其 Linux 分支(Acquire/BootLock/EnsureKernel/
+Release)是同一"引导+串行+生命周期"缝。两个选项:
+- **G1(推荐)**: 抽 `link_utils::KernelHost` 三函数(BeginBoot/ObtainCtx/EndSession),
+  双平台各一个编译单元文件;writer 会话零 `#ifdef`, 不引入 LinkPlatform。
+- G2: 维持现状 4 处分支(少而稳定, 承认不完美)。
+- 不选: 给 writer 强加 LinkPlatform(违反无平台层定案)/HeadlessPlatform(过度设计)。
+
+#### H. 知识安居铁律 + 映射
+
+每条踩坑结论必须落在且只落在两处之一, 不允许第三处(现状的会话 `#ifdef` 是第三处):
+
+| 经验 | 家 |
+|---|---|
+| 1(全屏盖大屏→窗口化+slot)/13(XShm 直拷)/14(屏高 BadMatch)/15(坐标上限) | xvfb_platform.cpp 内部 |
+| 5(引导串行+窗口查找可并行) | BeginBoot/Release 契约 + 核心在 setVisible(P5) 之后调用 Release(= 当前 calc_session.cpp:318 精确位, 非 P3) |
+| 22/23/27(bootstrap/profile 隔离) | EnsureKernel/BootstrapSession 契约(意图)+平台实现(机制) |
+| 26(放映中 UNO 几何黑屏) | FormWindow 契约 + 核心不持窗口句柄(构造性) |
+| 38④(writer 无平台层) | G 缝选择 |
+| 41(paused_ 重置在入口函数) | 核心(已是) |
+| Win settle 2500ms / 反序定型 / 1.5s 形态稳定 | win_platform.cpp 内部 + plan 数据 |
+
+#### I. 保证机制(三层)与诚实边界
+
+- **构建期(构造性)**: 核心零 `#ifdef` → 改核心语法上不可能破坏平台代码;改接口则
+  未适配平台**编译响亮失败**——失败点即唯一耦合点。
+- **行为期**: 双平台同脚本 conformance 探针(create→start→帧→翻页→destroy);
+  Linux 已有(impress_nextpage/media_green 等), Windows impress 落地时补等价物。
+- **知识期**: 经验编号锚定平台文件注释(上表), 细节搬家注释随行。
+- **边界**: 协议本身变更(新增里程碑)仍是双平台共同决策——以接口变更形态出现在
+  review, 响亮可见;无 Windows CI 前, "保证"上限 = 构造性防护 + 纪律。
+  C ABI 与 UNO 语义是共同资产, 动它们仍需对端编译确认。
+
+#### J. 迁移路径(每步可独立验证, 任意步后可停)
+
+1. **impress 先行**(收益最大: Windows 实现还是 stub, 先定缝后落地, 零返工):
+   LinkPlatform +SessionPlan/BeginBoot/DiscoverWindow/FormWindow/OnSessionEnd,
+   impress 会话清 `#ifdef`, Linux 全链探针回归。
+2. Windows impress 平台按新接口落地(契约即规格书), conformance 探针补齐。
+3. calc 跟进(含 F 反序用例), 回归 impress_multi/media_green。
+4. writer 可选: to_path 上收 link_utils(独立小步, 随时可做);G 缝按 G1/G2 决策。
+
+#### K. 反模式清单(明确不做)
+
+- 统一 X11/Win32 "窗口 API"(伪泛型, 最小公约数毁 workaround)
+- 按平台拆仓库(单树+目录隔离足够)
+- 为 writer 强加平台层 / 模板基类魔法(FramePollerBase 是经验 42 的事, 不混入本设计)
+
+---
+
 ### 已关闭事项
 
 **2026-08-18:**
@@ -337,6 +573,8 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - **Impress 暂停→恢复翻页失效**(经验 41, 实测修复)
 - **FramePoller 共性分析**(经验 42, 待实施)
 - **UI 隐藏收官**(经验 40⑦-⑨): sidebar/statusbar 模板条目补齐(66→69)+ 部署副本同步(踩部署陈旧坑), demo 肉眼验收全部隐藏; 重构检视+全量重建+单测 50/50+探针回归全绿
+- **平台隔离骨架落地(impress)+ BootLock 死锁修复**(3.0/3.3/经验 43): 会话层 `#ifdef` 清零, P0-P10 协议化, 探针复绿
+- **平台隔离设计全量实施**(3.3 J1-J4): J2 Windows impress 新接口落地(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd, calc/impress 策略按 profile_subdir 数据化); J3 calc_session 重构(P0-P10 协议化, 8 处 `#ifdef` → plan 数据驱动, F 反序定型用例, terminate 按 plan_.terminate_on_destroy 门控); J4 writer G 缝(link_utils::KernelHost 引导缝封装 + to_path 上收, writer 会话引导缝 `#ifdef` 清零); **Linux demo 回归通过**(修复 xvfb_platform Plan() 写死 impress 策略 bug: calc form=AfterReveal/impress form=AfterStart, 2 xlsx 黑屏消失); 日志前缀标准化([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow]); 待 Windows 侧回归
 
 **2026-08-17:**
 - LO 改动同步远端(commit 83e0b9c3e)
