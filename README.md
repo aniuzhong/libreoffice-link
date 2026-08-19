@@ -22,7 +22,8 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Off
   │     cmake/FindLibreOfficeSDK.cmake  SDK 查找 (缓存自愈)
   │     linux/xvfb_platform.*  XvfbSessionPlatform 单类参数化 (抓帧/slot/落位)
   │     linux/linux_platforms.cpp  工厂 (匹配规则即文档类型差异, 各 2 行)
-  │     windows/win_platform.*  WindowsPlatform (CreateDesktop 独立进程模式; impress stub)
+  │     windows/win_platform.*  WindowsPlatform (CreateDesktop 独立进程模式; 平台隔离
+  │                               新接口 Plan/BootSection 等, calc/impress 共用, 经验 39/44)
   ├── office_runtime/      OfficeRuntime → office_runtime.so — 进程级共享运行时 (Linux)
   │     Xvfb 大屏/LO 共享内核/slot shm/跨进程 BootLock/孤儿清场/BootLock/诊断
   │     office_runtime_test.cpp — 单测 (9 场景 50 检查, --stress N)
@@ -108,7 +109,13 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 - **GL 全禁用**:SAL_DISABLEGL=1(转场,经验 21)+ ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——Xvfb 恒无 GPU,一切渲染固定软件路径
 - **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[KernelHost]`(子场景点分如 `[CalcLink.Scroll]`/`[Common.UIHide]`/`[Common.WinWindow]`/`[Common.WinProfile]`/`[Common.X11]`/`[Common.Boot]`);平台层 Tag() 输出 lowercase `[calc]/[impress]`(区分会话层 `[CalcLink]/[ImpressLink]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),保留独立 fprintf + `[FFPLAY]`。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**——仅跳过初始化时 spdlog 默认 logger 仍打 stdout,已修)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准)。**前缀标准化(2026-08-18)**:`[Common]`→`[Common.Boot]`、`[CAPTURE]`→`[Common.WinWindow]`(归入 WinWindow 子域)
 - **所有者退出连坐**:共享内核/屏的所有者进程退出,其他进程会话断开;双实例部署需同时使用
-- Windows:win_platform 新接口(J2)已落地但**未编译验证**,需 Windows 侧确认(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd + calc F 反序 + impress 全屏放映 + writer KernelHost)
+- **Windows 平台隔离回归已完成 (2026-08-19)**: 编译零错误 (win_platform 新接口
+  Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd +
+  calc F 反序 + impress 全屏放映 + writer KernelHost); 探针五段全绿 + NovaPlayerDemo
+  calc/impress 全量通过 (UI 全隐藏含公式栏, 经验 44); 回归修复: win_platform
+  Plan() impress discover AfterReveal→AfterStart + 核心 P8 discover 分支 (协议遗漏)
+  + NovaOfficeCore PptCoreExport Windows 分发恢复 (被清理误删) + 模板补 calc 基线
+  (69→126 项, 见 3.1 模板部署保障)
 - UNO_PATH/URE_BOOTSTRAP 依赖部署位置(office/program),部署路径变化需同步(经验 23/33)
 - **旧独立进程方案已清理 (2026-08-17)**:source/ 目录、NovaLibreOfficePlayerDeprecated target、NovaLibreOfficePlayer.vcxproj、PptAnimationManagerLinux/LibreOffice(零实例化, PptCoreExport 全走新链/图片模式)、sln 工程引用、孤儿可执行 全部删除(git 可恢复)。Windows 侧为文本对应清理(CMake/sln/vcxproj),**需 Windows 编译确认**。ShareMemoryReaderLinux/NamePipe* 为 PDF 链/公共设施,保留
 - 已知待清理:① ~~calc profile seed 死开销~~(已清, 2026-08-17);② ~~[CALC-T]/[IMP-T] 等诊断日志~~(已清, 2026-08-18 日志体系统一:前缀/级别/单入口,见上条;[CalcLink.Scroll]/[Common.UIHide] 转入 debug 级,ORT_LOG_LEVEL=debug 可见);③ ~~过时探针~~(已清, 2026-08-18: calc 系旧 ABI/uno 系/注入 txt 等 22 文件,探针目录缩至 9 个全登记)
@@ -137,6 +144,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置, 一行修复。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
 | 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + 两个 bug + 性能问题, 修复优先级已排。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(分析完成, 待实施) |
 | 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 3.0 验证记录 | 08-18 | 高(源码级+实测修复) |
+| 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目 (老会话未隐藏过, 搜 formula 仅 2 处计算/sidebar 配置)。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 (画面只画表格首行) —— UI 验证以 demo 为准。**排查纪律 (2026-08-19 复盘)**: UNO_SILENT 异常进 **debug 级日志** (tag+表达式+消息), 默认 info 不可见 —— "静默失败"现象排查时**第一动作开 ORT_LOG_LEVEL=debug** 看 `UNO exception (silent)` 痕迹, 再下"未生效"结论 | 08-18 | 高(实测) |
 
 #### 经验 41 详述
 
@@ -365,7 +373,18 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - ✅ 死锁为包装实现踩契约 (经验 43), 一行修复; **设计本身无需返工**
 - ✅ impress 会话层 `#ifdef` 清零, 探针 impress_nextpage/media_green 复绿
 
-**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。待 Windows 侧编译/探针回归。
+**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。
+
+#### 目的达成评估 (2026-08-18 Windows 回归 + demo 通过后)
+
+**平台隔离 3.3 的五项目的逐项核验**:
+
+- ✅ **会话层零 `#ifdef`**: calc/impress/writer 剩余 `#ifdef` 均为编译机制类 (windows.h/FindWindow 宏 include, 3.3 E 表"可留"), 逻辑分支全部 plan 数据驱动
+- ✅ **平台差异安放 (意图/机制分离)**: Windows 回归发现的 4 个问题**无一在会话层平台分支** —— win_platform Plan() 数据错 (平台层, 2026-08-18 修 AfterReveal→AfterStart)、核心 P8 discover 分支遗漏 (协议实现遗漏, 非设计缺陷, 补 5 行)、PptCoreExport Windows 分发被清理误删 (上层 NovaOfficeCore, 非本模块)、vcxproj 失效引用 (构建) —— **协议化核心在双平台行为一致**
+- ✅ **变体点可枚举**: SessionPlan 一眼看清两平台差异 (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy); calc 反序 (F 用例) 与 impress 全屏作为 plan 数据落在平台层, 核心同一条代码
+- ✅ **构造性保证 (构建期)**: 平台隔离新接口 Windows 编译零错误; 改核心语法上碰不到平台代码
+- ✅ **行为期保证**: Windows conformance 探针五段全绿 (CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT, rc=0 零残留) + NovaPlayerDemo calc/impress 全量回归通过 (菜单栏/工具栏/状态栏/滚动条/公式栏全部隐藏)
+- ⚠️ **诚实边界**: 无 Windows CI (3.3 I 明示); FramePollerBase 属经验 42 不混入 (反模式清单 K); 模板部署保障 (CopyFile.bat) 待打包流程加项 (3.1)
 
 ---
 
@@ -375,9 +394,10 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
+| ★★ | **user 模板部署保障 (2026-08-18, 两平台)**: 模板 = 仓库 `templates/user/registrymodifications.xcu` (净化, 经验 40) → 部署 `office/program/templates/`。**Linux**: office_runtime POST_BUILD 自动拷贝 (构建时) ✓ 无需脚本; **Windows**: 不构建 office_runtime, **NovaPlayer 打包脚本 (CopyFile.bat 等) 需加 templates/ 拷贝项** —— 缺失时 WindowsPlatform::PrepareEnvironment seed 失败 → LO 默认 UI (2026-08-18 探针实测, 已手动部署当前环境) | 打包流程 |
 | ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
 | ★★ | **经验 42 FramePoller 治理落地**:立即项(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(FramePollerBase) | 分析已完成 |
-| ★ | **平台隔离 Windows 侧回归**(设计见 3.3, 已全量实施):Linux demo 回归通过 (calc/impress);待 Windows 侧编译 + 探针回归 (win_platform 新接口 / calc F 反序 / impress 全屏放映 / writer KernelHost) | 3.3 J 全量实施, Linux 已回归 |
+| ~~★~~ | ~~平台隔离 Windows 侧回归~~ → **已完成 (2026-08-19)**: 编译零错误 + 探针五段全绿 + demo 通过 (见 1.6 Windows 平台隔离回归); 回归发现修复 4 项 (Plan 数据/协议遗漏/上层分发/构建) — 无一在会话层平台分支 (3.3 目的达成评估见 3.0) | 完成 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
 
@@ -387,7 +407,8 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 |---|---|---|
 | ★★ | 2160p 混合分辨率落位产品化验证(默认配置已支持) | 配置验证 |
 | ★★ | slot 管理策略(超限语义/动态轮替/最大并发数) | 策略决策 |
-| ★ | Windows impress 平台补全(当前 stub)+ Windows 编译验证(含 2026-08-17 清理后的 CMake/sln 文本改动)+ win_platform seed 的窄字符 fs 调用 u2w 化(中文用户名路径风险, 与 md5 原问题同源, 2026-08-18 检视发现属遗留非新引入) | 平台补全 |
+| ~~★~~ | ~~Windows impress 平台补全 + Windows 编译验证~~ → **已完成 (2026-08-19)** (平台隔离回归, 见 1.6) | 完成 |
+| ★ | win_platform seed 的窄字符 fs 调用 u2w 化(中文用户名路径风险, 与 md5 原问题同源, 2026-08-18 检视发现属遗留非新引入) | 平台补全 |
 | ★ | 环境自检(字体/音频缺失明确报错)与崩溃检测告警 | 部署稳健性 |
 
 ---
@@ -424,7 +445,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 
   P0  平台工厂 + PrepareEnvironment      (Linux: Acquire/Xvfb/slot; Win: DPI/桌面/profile seed)
   P1  BeginBoot (BootSection RAII)       — 意图: 并发 Create 引导+加载须串行(经验 5)
-  P2  EnsureKernel → 空 ctx 则 BootstrapSession (calc 已是此形态, impress 待 Windows 落地时对齐)
+  P2  EnsureKernel → 空 ctx 则 BootstrapSession (calc/impress 均已此形态; writer 走 KernelHost)
   P3  SnapshotWindows + Hidden 加载          — 意图: 引导+加载须串行(经验 5)
   (BootSection::Release 不在 P3: 见 P5 后注*; 提前释放会 reintroduce 经验 5)
   *Release 绑定点 = 当前 calc_session.cpp:318 / impress 对应精确位。setVisible(P5)
@@ -574,7 +595,7 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 - **FramePoller 共性分析**(经验 42, 待实施)
 - **UI 隐藏收官**(经验 40⑦-⑨): sidebar/statusbar 模板条目补齐(66→69)+ 部署副本同步(踩部署陈旧坑), demo 肉眼验收全部隐藏; 重构检视+全量重建+单测 50/50+探针回归全绿
 - **平台隔离骨架落地(impress)+ BootLock 死锁修复**(3.0/3.3/经验 43): 会话层 `#ifdef` 清零, P0-P10 协议化, 探针复绿
-- **平台隔离设计全量实施**(3.3 J1-J4): J2 Windows impress 新接口落地(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd, calc/impress 策略按 profile_subdir 数据化); J3 calc_session 重构(P0-P10 协议化, 8 处 `#ifdef` → plan 数据驱动, F 反序定型用例, terminate 按 plan_.terminate_on_destroy 门控); J4 writer G 缝(link_utils::KernelHost 引导缝封装 + to_path 上收, writer 会话引导缝 `#ifdef` 清零); **Linux demo 回归通过**(修复 xvfb_platform Plan() 写死 impress 策略 bug: calc form=AfterReveal/impress form=AfterStart, 2 xlsx 黑屏消失); 日志前缀标准化([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow]); 待 Windows 侧回归
+- **平台隔离设计全量实施**(3.3 J1-J4): J2 Windows impress 新接口落地(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd, calc/impress 策略按 profile_subdir 数据化); J3 calc_session 重构(P0-P10 协议化, 8 处 `#ifdef` → plan 数据驱动, F 反序定型用例, terminate 按 plan_.terminate_on_destroy 门控); J4 writer G 缝(link_utils::KernelHost 引导缝封装 + to_path 上收, writer 会话引导缝 `#ifdef` 清零); **Linux demo 回归通过**(修复 xvfb_platform Plan() 写死 impress 策略 bug: calc form=AfterReveal/impress form=AfterStart, 2 xlsx 黑屏消失); 日志前缀标准化([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow]); **Windows 侧回归完成 (2026-08-19, 见 1.6)**
 
 **2026-08-17:**
 - LO 改动同步远端(commit 83e0b9c3e)
