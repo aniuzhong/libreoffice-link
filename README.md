@@ -141,54 +141,86 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 7 | **Hidden 加载**:slot 方案下 Hidden 加载正常无闪烁;可见加载方案已废弃 | 08-12 前 | 高 |
 | 9 | **退出时 X IO Error 噪音无影响**(atexit 杀 Xvfb 时 LO 打印 Fatal 后退出) | 08-12 前 | 高 |
 | 19c | 会话重建不做:确定性故障重建仍崩;改为崩溃检测+明确告警 | 08-12 | 高 |
-| 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置, 一行修复。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
-| 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + 两个 bug + 性能问题, 修复优先级已排。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(分析完成, 待实施) |
+| 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置。FramePump 接入后同构复现 (泵 Start 幂等早返未重置 paused_), 已由泵契约根治。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
+| 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + P3-P8 新发现。FramePump 组件统一帧泵, 阶段0-4 全部落地, 三链接入收官。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(阶段0-4全部完成) |
 | 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 3.0 验证记录 | 08-18 | 高(源码级+实测修复) |
 | 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目 (老会话未隐藏过, 搜 formula 仅 2 处计算/sidebar 配置)。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 (画面只画表格首行) —— UI 验证以 demo 为准。**排查纪律 (2026-08-19 复盘)**: UNO_SILENT 异常进 **debug 级日志** (tag+表达式+消息), 默认 info 不可见 —— "静默失败"现象排查时**第一动作开 ORT_LOG_LEVEL=debug** 看 `UNO exception (silent)` 痕迹, 再下"未生效"结论。**[2026-08-19 4.2 实证修正]**: InputLineVisible dispatch 在 Linux 共享内核下破坏 vis=0 初始态导致 UI 复活, 已下沉至 Windows HideUiExtras (Linux 空操作); LO Xvfb 无头环境公式栏默认 vis=0 不显示, 无需 dispatch | 08-18 | 高(实测, 部分认知已修正) |
 
 #### 经验 41 详述
 
-**Impress 暂停→恢复翻页失效 (2026-08-18, Demo 实测修复)**
+**Impress 暂停→恢复翻页失效 (2026-08-18 Demo 实测修复; 2026-08-19 FramePump 接入后同构复现)**
 
-上层 pause/resume 链路**不对称**——pause 走 `Pause()`(设 `paused_=true`, poller 不停), resume 走 `Start()`(非 `Resume()`)。
+**原发 (2026-08-18, per-session poller 时代)**: 上层 pause/resume 链路不对称——pause 走 `Pause()`(设 `paused_=true`, poller 不停), resume 走 `Start()`(非 `Resume()`)。`Start()` 内 `paused_=false` 原写在 `StartPoller()` 里, 但 `StartPoller()` 对 `poll_running_==true` 做 early-return(pause 不停 poller, 所以恢复时必命中)→ `paused_` 永远不被重置→ poller 跳过抓帧。修复: `Start()` 中显式 `paused_=false`。
 
-`Start()` 内 `paused_=false` 原写在 `StartPoller()` 里, 但 `StartPoller()` 对 `poll_running_==true` 做 early-return(pause 不停 poller, 所以恢复时必命中)→ `paused_` 永远不被重置→ poller 跳过抓帧 + `NextPage()` 虽调 `gotoNextEffect()` 但帧不刷新。
+**同构复现 (2026-08-19, FramePump 接入后)**: impress 接入 FramePump 后, `Start()` 委托 `pump_->Start()`。FramePump::Start() 幂等早返路径同样未重置 `paused_` (成员上移到泵内), 导致暂停→恢复(走 Start)画面冻结。根因同构: 状态重置依赖幂等早返路径, 但早返跳过了重置。
 
-**修复**: `Start()` 中 `slideshow_->resume()` 后、`StartPoller()` 前显式 `paused_=false`(一行, impress_session.cpp:331)。
+**根治**: FramePump::Start() 持 `ctrl_mutex_` 内**无条件** `paused_=false` 再判幂等 (frame_pump.cpp)。契约写入: "Start=任何状态→Running 未暂停" (见经验 42 契约表)。新增测试 9 (start_resets_paused_when_running) 闭环。
 
-**教训**: 暂停/恢复走不同入口时, 状态重置必须放在入口函数本身, 不能委托给可能被 early-return 的下游。
+**教训**: 暂停/恢复走不同入口时, 状态重置必须放在入口函数本身, 不能委托给可能被 early-return 的下游; 幂等路径也必须执行状态重置。
 
 #### 经验 42 详述
 
-**FramePoller 共性分析与治理 (2026-08-18, 待实施)**
+**FramePoller 共性分析与治理 (2026-08-18 分析, 2026-08-19 阶段0-4 全部落地)**
 
-Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running_`/`paused_`/`force_frame_`/`mu_`)完全同名同型, 但实现六维不一致。
+三链 (impress/calc/writer) 各自手写一份 poller (`poll_thread_`/`poll_running_`/`paused_`/`force_frame_`/`mu_` 同名同型), 六维不一致演化出 P1-P8 缺陷。本经验为完整治理记录, framepoller.md 为原始设计稿 (含逐链事实勘误, 保留作历史)。
 
-**Bug 级问题:**
+**契约 (三链同一份, FramePump 构造性保证):**
 
-- ① **Impress `force_frame_` 泄漏**——PollThread 只读不清(`if (!paused_ || force_frame_)`), UpdateFrame() 设后 poller 暂停时仍持续抓帧; Calc/Writer 正确用 `exchange(false)` 消费
-- ② **Calc `Start()` 不重置 `paused_`**——同 Impress #41 修复前状态, 隐患
+| 方法 | 契约 |
+|---|---|
+| Start | 幂等; 任何状态调用后 = Running 且未暂停 (无条件 `paused_=false` 再判幂等, 构造性消灭 P1/P5; 2026-08-19 回归修复: 幂等早返未重置 paused_ 致 impress 暂停→恢复无法翻页) |
+| Stop | 幂等; join 泵线程, 排空在途帧; 之后无任何自动推帧 |
+| Pause | 冻结周期推帧 (心跳是否照推 = plan.heartbeat_when_paused); 绝不影响 UpdateFrame; 内容暂停 (impress slideshow pause) 是会话自己的事, 与泵解耦 |
+| Resume | 恢复周期推帧 |
+| UpdateFrame | 同步立即帧, Running/Paused/Stopped 任何状态有效 (修 P6); 与泵 tick 串行 (修 P3); 返回抓帧成败 |
 
-**六维不一致:**
+生命周期不变量: **泵必须先 Stop, 会话才能清 UNO 对象/平台资源** (probe 与 FrameFn 引用的 pane_/view_/platform_ 仅在泵停止后可销毁)。
 
-| 维度 | Impress | Calc | Writer |
-|---|---|---|---|
-| Start()重置 paused_ | ✅ | ❌ | ✅ |
-| Start/Pause/Stop 持锁 | 全✅ | 全❌ | 混合 |
-| UpdateFrame 语义 | 同步+flag | 异步flag-only | 同步+锁 |
-| PollThread 持锁 | 无锁 | 全循环锁 | 全循环锁 |
-| Heartbeat | 无 | 100ms(暂停也跳) | 100ms(暂停不跳) |
-| Poll 间隔 | 40ms | 5ms | 5ms |
+**缺陷清单 → 机制映射 (全部闭环):**
 
-**性能问题:**
+| 问题 | 描述 | 消灭机制 |
+|---|---|---|
+| P1 | calc Start() 不重置 paused_ (同经验 41 形态) | 契约 "Start=任何状态→Running 未暂停" (泵内无条件 paused_=false) |
+| P1' | impress force_frame_ 无意义 + 置位窗口期并发 (经验 42 原描述"只读不清"已勘误: 实为置位→直推→立即复位, 标志本身无意义) | impress 标志删除 (UpdateFrame 走 frame_mutex_ 直推); writer/calc 保留 force_frame_ 作 ChangeFn 脏位 (有意义) |
+| P3 | impress 并发抓帧数据竞争 (UpdateFrame 调用方线程 vs PollThread 泵线程, 共写 cap_bgra_/XShm) | frame_mutex_ 串行所有 FrameFn (构造性) |
+| P4 | 帧回调 cb_ 在会话锁 mu_ 内 (calc/writer) | 锁纪律: cb_ 锁外投递; 全局锁序 frame_mutex_→mu_(短), 严禁反向 |
+| P5 | calc 双 Start 竞态 → std::terminate (StartPoller check-then-act 非原子, 对 joinable poll_thread_ 赋值) | 泵内部生成互斥 + Start 幂等 |
+| P6 | calc 停止后取帧黑屏 (UpdateFrame 仅置标志, Stop 后标志无人消费) | UpdateFrame 全状态有效 (Stopped 就地执行) |
+| P7 | 性能三连: calc/writer 5ms 全速循环=200 唤醒/s; calc 每 5ms 一次 UNO 视口查询=200 IPC/s; impress 静止 25fps 全量重推≈208MB/s | tick 合并 (calc 200→50 唤醒/IPC); dedupe 待阶段5 |
+| P8 | impress width_/height_ 无同步写读 (泵线程写, GetWidth 读, 形式 UB) | — (迁移期未单独处理, FramePump 路径下宽高写主要在 Create/Start 阶段) |
 
-- Calc PollThread 持锁调 UNO(跨进程延迟阻塞其他操作)
-- Calc/Writer 5ms 轮询远超实际变化频率
-- Impress 静止无条件抓帧
+**勘误 (经验 42 原表述修正):**
+- "Calc 心跳暂停也跳" → 应为 "**暂停照推**" (calc 心跳判定无 paused_ 门控, 暂停中仍 10fps; writer 才是暂停冻结)。语义分歧从未被有意决策, 迁移期 plan.heartbeat_when_paused 显式保留现状 (calc=true, writer=false)
+- "Impress force_frame_ 泄漏" → 已勘误 (见 P1'): 标志不泄漏, 真实缺陷是无意义+并发
 
-**根因**: 三 link poller 基础设施完全重复, 无统一基类约束。
+**FramePump 设计 (common/frame_pump.h/.cpp):**
+- `FramePumpPlan { tick_ms, heartbeat_ms, heartbeat_when_paused, fail_backoff_ms }` — 每链一份 plan 数据, 差异降维
+- `frame_mutex_` 串行所有 FrameFn 执行 (泵 tick + UpdateFrame 调用方就地执行, 否决"单线程委托"方案: 引入唤醒延迟且 Stopped 态仍须回退就地执行)
+- `ctrl_mutex_` + condvar tick (Stop 可立即打断等待)
+- ChangeFn (可选): 内容是否可能变化 (calc 视口签名 / writer 脏位); impress 无 probe=恒真
+- 锁纪律: 调用泵方法不得持 mu_; FrameFn/ChangeFn 内部自取短会话锁; 全局锁序 frame_mutex_→mu_
 
-**修复优先级**: 立即(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(提取 FramePollerBase 统一三 link)
+**三链接入形态 (已完成):**
+
+| 链 | tick | heartbeat | hbp | ChangeFn (probe) | FrameFn 锁 |
+|---|---|---|---|---|---|
+| impress | 40ms (25fps 不变) | 0 (无) | false | nullptr (恒真) | 不持 mu_ (platform 自锁) |
+| writer | 5ms | 100ms | false (Pause 冻结) | `force_frame_.exchange` (脏位) | 持 mu_ (访问 page_cache_) |
+| calc | 20ms (放宽原 5ms) | 100ms | true (Pause 照推) | `CheckViewportChanged` 持 mu_ (视口签名 row/col/sheet + force_frame_ 脏位) | 不持 mu_ (platform 自锁) |
+
+**迁移路径 (全部已完成):**
+- **阶段0** (2026-08-19): 各一行级修复, 立即消灭 P1/P5/P6, 临时防 P3 (已被阶段2-4 取代)
+- **阶段1** (2026-08-19): FramePump 组件 + 单测落地 (common/frame_pump.h/.cpp + frame_pump_test.cpp)
+- **阶段2** (2026-08-19): impress 接入 (无 probe 无心跳, 等价原 PollThread); demo 回归通过 (放映帧/1px/暂停恢复)
+- **阶段3** (2026-08-19): writer 接入 (脏位 probe, Pause 冻结); demo 回归通过
+- **阶段4** (2026-08-19): calc 接入 (视口签名+脏位 probe, Pause 照推, tick 20ms); demo 回归通过
+- **阶段5** (可选, 未做): 平台层段内比对 (CaptureFrame 增量 unchanged 参数, 省应用层 8.3MB 拷贝) + dedupe + calc zoom 维度 A/B
+
+**单测**: frame_pump_test.cpp 9 个测试 15 checks (Start 幂等/Stop 排空/Pause 冻结/UpdateFrame 串行/心跳/失败退避/重启/ChangeFn 探测/Start 重置 paused_ 回归), 全绿
+
+**开放问题 (不影响阶段0-4, 可延后):**
+- A. 帧新鲜度 TTL: 消费方是否存在"末帧超时视为无帧"? 决定心跳保留(近零成本) or 静止静默(收益最大)。dedupe 两阶段设计使该问题可延后且不返工
+- B. calc tick 20ms 滚动延迟接受度 (最坏 +15ms): 默认 20ms, plan 一处可改, 可 A/B 探针实测后定
 
 ### 2.2 跨进程协调(共享屏/内核/slot)
 
@@ -386,7 +418,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - ✅ **变体点可枚举**: SessionPlan 一眼看清两平台差异 (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy); calc 反序 (F 用例) 与 impress 全屏作为 plan 数据落在平台层, 核心同一条代码
 - ✅ **构造性保证 (构建期)**: 平台隔离新接口 Windows 编译零错误; 改核心语法上碰不到平台代码
 - ✅ **行为期保证**: Windows conformance 探针五段全绿 (CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT, rc=0 零残留) + NovaPlayerDemo calc/impress 全量回归通过 (菜单栏/工具栏/状态栏/滚动条/公式栏全部隐藏)
-- ⚠️ **诚实边界**: 无 Windows CI (3.3 I 明示); FramePollerBase 属经验 42 不混入 (反模式清单 K); 模板部署保障 (CopyFile.bat) 待打包流程加项 (3.1)
+- ⚠️ **诚实边界**: 无 Windows CI (3.3 I 明示); FramePump 接入待 Windows 侧回归确认 (经验 42 阶段2-4 Linux 已收官); 模板部署保障 (CopyFile.bat) 待打包流程加项 (3.1)
 
 ---
 
@@ -398,7 +430,8 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 |---|---|---|
 | ★★ | **user 模板部署保障 (2026-08-18, 两平台)**: 模板 = 仓库 `templates/user/registrymodifications.xcu` (净化, 经验 40) → 部署 `office/program/templates/`。**Linux**: office_runtime POST_BUILD 自动拷贝 (构建时) ✓ 无需脚本; **Windows**: 不构建 office_runtime, **NovaPlayer 打包脚本 (CopyFile.bat 等) 需加 templates/ 拷贝项** —— 缺失时 WindowsPlatform::PrepareEnvironment seed 失败 → LO 默认 UI (2026-08-18 探针实测, 已手动部署当前环境) | 打包流程 |
 | ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
-| ★★ | **经验 42 FramePoller 治理落地**:立即项(Impress force_frame_ 泄漏 + Calc paused_ 重置)→ 中期(Calc UNO 移出锁 + 轮询间隔放宽)→ 远期(FramePollerBase) | 分析已完成 |
+| ~~★★~~ | ~~经验 42 FramePoller 治理落地~~ → **已完成 (2026-08-19)**: FramePump 组件统一帧泵, 阶段0-4 全部落地 (impress/writer/calc 接入收官), 删除所有 per-session poller 重复; 单测 15/15 全绿; demo 回归通过。详见经验 42 详述 | 完成 |
+| ★ | **经验 42 阶段5 (可选)**: 平台层段内比对 (CaptureFrame 增量 unchanged 参数) + dedupe + calc zoom 维度 A/B; 开放问题 A (帧新鲜度 TTL) / B (calc tick 20ms 延迟接受度) 待 NovaPlayer 侧验证 | 远期优化 |
 | ~~★~~ | ~~平台隔离 Windows 侧回归~~ → **已完成 (2026-08-19)**: 编译零错误 + 探针五段全绿 + demo 通过 (见 1.6 Windows 平台隔离回归); 回归发现修复 4 项 (Plan 数据/协议遗漏/上层分发/构建) — 无一在会话层平台分支 (3.3 目的达成评估见 3.0) | 完成 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
@@ -553,11 +586,11 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 | 经验 | 家 |
 |---|---|
 | 1(全屏盖大屏→窗口化+slot)/13(XShm 直拷)/14(屏高 BadMatch)/15(坐标上限) | xvfb_platform.cpp 内部 |
-| 5(引导串行+窗口查找可并行) | BeginBoot/Release 契约 + 核心在 setVisible(P5) 之后调用 Release(= 当前 calc_session.cpp:318 精确位, 非 P3) |
+| 5(引导串行+窗口查找可并行) | BeginBoot/Release 契约 + 核心在 setVisible(P5) 之后调用 Release |
 | 22/23/27(bootstrap/profile 隔离) | EnsureKernel/BootstrapSession 契约(意图)+平台实现(机制) |
 | 26(放映中 UNO 几何黑屏) | FormWindow 契约 + 核心不持窗口句柄(构造性) |
 | 38④(writer 无平台层) | G 缝选择 |
-| 41(paused_ 重置在入口函数) | 核心(已是) |
+| 41(paused_ 重置在入口函数) | FramePump::Start 契约 (泵内无条件 paused_=false, 经验 42 承接) |
 | Win settle 2500ms / 反序定型 / 1.5s 形态稳定 | win_platform.cpp 内部 + plan 数据 |
 
 #### I. 保证机制(三层)与诚实边界
@@ -584,17 +617,27 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 
 - 统一 X11/Win32 "窗口 API"(伪泛型, 最小公约数毁 workaround)
 - 按平台拆仓库(单树+目录隔离足够)
-- 为 writer 强加平台层 / 模板基类魔法(FramePollerBase 是经验 42 的事, 不混入本设计)
+- 为 writer 强加平台层 / 模板基类魔法(FramePump 是经验 42 的事, 不混入本设计)
 
 ---
 
 ### 已关闭事项
 
+**2026-08-19:**
+- **UI 隐藏专项**(4.2): InputLineVisible dispatch 下沉至 HideUiExtras (平台隔离); 6 次探针实验闭合验证 setMenuBar 消除 impress 1px 底边框; HANDOFF.md 认知错位修正 (FullScreen 从未生效等)
+- **FramePoller 阶段0**(经验 42): calc Start 补持锁+重置 paused_ (修 P1/P5); calc UpdateFrame 改锁内直推 (修 P6); impress UpdateFrame 加 mu_ 防并发 (临时防 P3); 单测 50/50 全绿
+- **FramePoller 阶段1**(经验 42): FramePump 组件 + 单测落地 (common/frame_pump.h/.cpp + frame_pump_test.cpp); 单测 14/14 全绿
+- **FramePoller 阶段2**(经验 42): impress 接入 FramePump (tick=40/heartbeat=0/backoff=200, 等价原 PollThread); 清理遗留 StartPoller/StopPoller/PollThread + NextPage 日志残留; impress 补齐 HideUiExtras 调用 (平台隔离两层契约, 之前漏调); demo 回归: pptx 放映帧正常 + 1px 依旧消失
+- **FramePump Start 契约回归修复**(经验 41/42 P1): impress demo "暂停→恢复无法翻页"复现经验 41 路径(resume 走 Start)。根因: FramePump::Start() 幂等早返未重置 paused_, 违反契约"Start=任何状态→Running 未暂停"(framepoller.md 五/P1)。修复: Start() 持 ctrl_mutex_ 内无条件 `paused_=false` 再判幂等; 新增测试 9 (start_resets_paused_when_running) 闭环; 单测 15/15 全绿
+- **FramePoller 阶段3**(经验 42): writer 接入 FramePump。ChangeFn=force_frame_.exchange(脏位 probe), FrameFn=PushFrame 持 mu_ 访问 page_cache_ (frame_mutex_→mu_ 锁序, 无反向); tick=5/heartbeat=100/hbp=false (Pause 冻结, 与原 PollThread `!paused_&&heartbeat_due` 一致)/backoff=200。删除 PollThread/StartPoller/StopPoller。38⑦ 语义(停止后取帧黑屏)由泵全状态 UpdateFrame 承接
+- **FramePoller 阶段4**(经验 42): calc 接入 FramePump。ChangeFn=CheckViewportChanged(持 mu_, 视口签名 row/col/sheet + force_frame_ 脏位, 原 PollThread 内联逻辑提取为方法); tick=20(放宽原 5ms full-speed, 性能预算 50 唤醒/s)/heartbeat=100/hbp=true(Pause 照推, 与原 PollThread 心跳无 paused_ 门控一致)/backoff=200。Create 末尾加首帧 UpdateFrame。P1(Start 不重置 paused_)/P5(双 Start 竞态)/P6(停止后取帧黑屏) 均由 FramePump 契约承接。zoom 维度仍缺(靠心跳兜底, 待 A/B)
+- **三链 FramePump 接入收官**(经验 42 阶段2-4): impress/writer/calc 均已接入统一帧泵, 删除所有 per-session poll_thread_/paused_/force_frame_ 重复实现; 全量构建通过, 单测 15/15 全绿
+
 **2026-08-18:**
 - 诊断日志清理(日志体系统一: 前缀/级别/单入口)
 - 代码重构(link_utils 工具整合/DEFER/UNO_GUARD/异常日志补全/SYS_gettid 可移植)
 - **Impress 暂停→恢复翻页失效**(经验 41, 实测修复)
-- **FramePoller 共性分析**(经验 42, 待实施)
+- **FramePoller 共性分析**(经验 42, 当日待实施; 2026-08-19 阶段0-4 全部落地)
 - **UI 隐藏收官**(经验 40⑦-⑨): sidebar/statusbar 模板条目补齐(66→69)+ 部署副本同步(踩部署陈旧坑), demo 肉眼验收全部隐藏; 重构检视+全量重建+单测 50/50+探针回归全绿
 - **平台隔离骨架落地(impress)+ BootLock 死锁修复**(3.0/3.3/经验 43): 会话层 `#ifdef` 清零, P0-P10 协议化, 探针复绿
 - **平台隔离设计全量实施**(3.3 J1-J4): J2 Windows impress 新接口落地(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd, calc/impress 策略按 profile_subdir 数据化); J3 calc_session 重构(P0-P10 协议化, 8 处 `#ifdef` → plan 数据驱动, F 反序定型用例, terminate 按 plan_.terminate_on_destroy 门控); J4 writer G 缝(link_utils::KernelHost 引导缝封装 + to_path 上收, writer 会话引导缝 `#ifdef` 清零); **Linux demo 回归通过**(修复 xvfb_platform Plan() 写死 impress 策略 bug: calc form=AfterReveal/impress form=AfterStart, 2 xlsx 黑屏消失); 日志前缀标准化([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow]); **Windows 侧回归完成 (2026-08-19, 见 1.6)**
