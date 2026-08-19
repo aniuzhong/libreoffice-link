@@ -483,7 +483,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
   P2  EnsureKernel → 空 ctx 则 BootstrapSession (calc/impress 均已此形态; writer 走 KernelHost)
   P3  SnapshotWindows + Hidden 加载          — 意图: 引导+加载须串行(经验 5)
   (BootSection::Release 不在 P3: 见 P5 后注*; 提前释放会 reintroduce 经验 5)
-  *Release 绑定点 = 当前 calc_session.cpp:318 / impress 对应精确位。setVisible(P5)
+  *Release 绑定点 = 当前 calc_session.cpp Create() 内 setVisible(P5) 之后 (boot_section->Release(), 经验 5)。setVisible(P5)
    触碰共享内核须串行, Release 须在 P5 之后、首个 discover 之前调用; 提前到
    P3/SnapshotWindows 之后释放 = 并发 Create 卡死(经验 5)。core 显式调用此点。
   P4  [W@BeforeReveal]                   ← plan 绑定点 (calc/Win 在此发现+定型, 见 F 用例)
@@ -515,7 +515,7 @@ struct SessionPlan {
 };
 
 // 引导段 RAII: 构造 = 进入串行区, Release() = 核心在 setVisible(P5) 之后显式调用
-// (早释点本身是协议: "窗口查找可并行", 经验 5; 须等于当前 calc_session.cpp:318,
+// (早释点本身是协议: "窗口查找可并行", 经验 5; 须等于 Create() 内 setVisible(P5) 之后,
 //  不得提前到 P3/SnapshotWindows 之后 —— 否则 reintroduce 经验 5 并发崩溃)
 class BootSection { virtual void Release() = 0; ... };  // Linux 真锁 / Win 空实现
 
@@ -806,6 +806,14 @@ vis=0, 模板条目被覆盖), 但在新代码 (含 InputLineVisible, 触发 UI 
 - 假设"平台机制隔离了 = UI 隔离了" (UI 隐藏副作用是平台相关的)
 - 为统一而统一 (Linux 不需要 InputLineVisible, 不应为了"对齐"而在 Linux 也调用)
 
+### 4.6 关联索引
+
+**关联经验**: 32 (平台层归组重构, common/{linux,windows}) / 40 (user 模板机制, 4.3 模板隔离) / 43 (BootLock 死锁, BeginBoot RAII) / 44 (Windows 回归, 1.6)
+**关联待办**: 3.1 user 模板部署保障 (Windows 打包脚本) / win_platform seed u2w 化 (3.2)
+**已闭环记录**: 2026-08-18 平台隔离骨架+全量实施 (已闭环事项) / 2026-08-19 UI 隐藏专项+Windows 回归 (已闭环事项)
+**设计文档**: 3.3 (LinkPlatform 接口定稿形态 D) / 3.0 (验证记录)
+**writer 例外**: 无平台层 (经验 38 定案, G 缝 = link_utils::KernelHost 引导缝)
+
 ---
 
 ## 五、帧泵专项
@@ -885,4 +893,85 @@ calc 的 UNO 视口查询从"每 5ms 无条件"变为"每 tick 一次、心跳�
 
 - **A. 帧新鲜度 TTL**: 消费方 (取帧链) 是否存在"末帧超时视为无帧"? 决定心跳保留 (近零成本) or 静止静默 (收益最大); 以及 hbp 三链统一值。验证手段: NovaPlayer PlayerItem.getVideoFrame 侧读帧逻辑确认。无论答案如何, 阶段0-4 不需要该答案 (dedupe 无内容风险, 心跳保留现状)。
 - **B. calc tick 20ms 滚动延迟接受度** (最坏 +15ms): 接受 / 改 10ms (+5ms) / A/B 探针实测后定。默认 20ms, plan 一处可改。
+
+### 5.6 关联索引
+
+**关联经验**: 41 (暂停→恢复翻页失效, 泵 Start 契约承接) / 42 (FramePoller 共性分析, 本章主体) / 38⑦ (writer 停止后取帧黑屏, 泵全状态 UpdateFrame 承接) / 13 (XShm 性能基准, 性能预算依据)
+**关联待办**: 3.1 经验 42 阶段5 (平台层段内比对 + dedupe + calc zoom A/B, 可选远期)
+**已闭环记录**: 2026-08-19 阶段0-4 + Start 契约回归修复 (已闭环事项, 含各阶段配置参数)
+**探针**: impress_nextpage / impress_multi (并发) / media_green (双态) / writer_probe / ffplay_engine (引擎推进)
+**正交关系**: 与 3.3 平台隔离设计正交 (FramePump 是 common 基础设施, 不触碰 LinkPlatform); 唯一交点 = 阶段5 CaptureFrame(+unchanged) 走 3.3 接口变更流程
+
+---
+
+## 六、FFplay 嵌入专项
+
+> ffplay 嵌入引擎 (office_runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 的尺寸链治理。
+> 关联经验 34 (补丁式复用)、19b (软件渲染/Xvfb 无 GPU)、37 (并发创建竞态)。
+> 探针: xvfb_calc_demo/ffplay_window_size_probe.cpp (engine 组, 直接验证引擎)。
+
+### 6.1 问题: video_open 硬编码 640x480
+
+ffplay_embed.c `video_open()` 用 `default_width/default_height` (640x480) 设置 `is->width/is->height`, 这两个值决定 `calculate_display_rect()` 的视频绘制矩形。嵌入模式下 `screen_width/screen_height=0`, 所以 `w = default_width = 640, h = default_height = 480`, 与外部 X11 窗口实际尺寸无关。
+
+**影响**: 视频绘制矩形基于 640x480 计算, 当 LO 媒体窗口尺寸 ≠ 640x480 时, 视频在窗口内位置/缩放错误 (letterbox/pillarbox 计算基于错误尺寸)。
+
+**尺寸链 (LO → ffplay)**:
+1. LO `mediawindow_impl.cxx` Resize(): `mpChildWindow->SetPosSizePixel(Point(0,0), aPlayerWindowSize)` 创建媒体子窗口
+2. LO `createPlayerWindow()`: aArgs[0] = `GetParentWindowHandle()` (父窗口 X 句柄), aArgs[1] = `Rectangle(0,0,aSize.W,aSize.H)` (尺寸)
+3. ffplay_player.cxx `createPlayerWindow()`: 解析 aArgs[0] = parent, aArgs[1] = rect; **rect 被忽略**, 只传 parent 给 `ffplay_engine_create`
+4. ffplay_embed.c `ffplay_engine_create()`: `SDL_CreateWindowFrom(parent)` (首次 video_open)
+5. video_open: `is->width = default_width = 640` ← **bug: 应读 SDL 窗口实际尺寸**
+
+### 6.2 修复 (方案A, 2026-08-19 落地)
+
+`video_open()` 的 `if (!is->window)` 块内, renderer 创建成功后加 `SDL_GetWindowSize(is->window, &w, &h)` 覆盖 w/h:
+
+```c
+window = is->window;
+renderer = is->renderer;
+SDL_GetWindowSize(is->window, &w, &h);  // 替代 default_width/height (640x480)
+```
+
+**技术依据**: SDL X11 驱动 `X11_CreateWindowFrom` → `SetupWindowData` 用 `XGetWindowAttributes` 设置 `window->w/h`, 故 `SDL_GetWindowSize` 返回值 = X11 窗口真实尺寸 (SDL2 源码 `SDL_x11window.c` 实证)。
+
+**局限 (开放问题)**: 仅首次创建时获取; 运行时 X11 resize 不感知 (SDL 缓存的 window->w/h 不会自动更新, `PlayerWindowShell::setPosSize` 是 no-op)。放映期媒体窗口尺寸通常固定, 列为开放问题。
+
+**修改文件**: ffplay_embed.c (video_open) + ffplay_embed.patch 回填 (经验 34 纪律)。
+
+### 6.3 探针验证 (严格例证)
+
+**探针**: `ffplay_window_size_probe.cpp` (engine 组, 直接调 ffplay_engine API, 不经过 LO/soffice)
+- 加 `ffplay_engine_get_window_size(handle, int* w, int* h)` API (ffplay_engine.h + ffplay_embed.c + patch 回填) 读取 `is->width/is->height`
+- 三方对比: 期望 (探针创建的 X11 窗口) / X11 (XGetWindowAttributes 实测) / ffplay (engine 内部 is->width/height)
+- 默认 500x300 (故意 ≠ 640x480 以暴露 bug)
+
+**修复前基线** (2026-08-19):
+```
+期望: 500x300 | X11: 500x300 | ffplay: 640x480
+ffplay == 640x480 硬编码: YES (BUG 确认)
+```
+
+**修复后** (2026-08-19):
+```
+期望: 500x300 | X11: 500x300 | ffplay: 500x300
+ffplay == X11: YES (尺寸链一致)
+结论: PASS — 硬编码已修复
+```
+
+**Demo 回归** (2026-08-19): 含视频 pptx 放映, 视频尺寸正确, 修复闭环。
+
+### 6.4 开放问题
+
+- **运行时 resize**: 方案A 仅首次创建; 若放映期媒体窗口被 LO resize (如放映窗口尺寸变化), ffplay 的 is->width/height 不会更新。升级路径: 方案B (ffplay_engine_set_window_size API + PlayerWindowShell::setPosSize 调用) 或方案C (SDL_WINDOWEVENT_RESIZED 事件监听)。放映期尺寸固定为常见场景, 暂不升级。
+- **aArgs[1] rect 未使用**: ffplay_player.cxx 解析了 aArgs[1] (LO 期望尺寸) 但未传给引擎。方案B 可让引擎直接接收 LO 权威尺寸, 绕过 SDL_GetWindowSize 的局限。但方案A 已解决核心问题 (首次创建), 方案B 为可选优化。
+
+### 6.5 关联索引
+
+**关联经验**: 17 (gst 崩溃链, ffplay 替代基础) / 18 (gst 修复, 回退路径) / 19 (弯路勿重走, ffplay 软解定论) / 28 (gst 依赖检测, ffplay 价值=无 gst 时播放) / 29 (ffplay 正规注入 SDK 模式) / 30 (媒体后端开关 ORT_MEDIA_BACKEND) / 34 (补丁式复用, 改 embed.c 必须回填 patch) / 37 (多实例并行播放, SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer)
+**关联待办**: 3.1 ffplay 能力增强 (XFrameGrabber/硬解/媒体信息) / ffplay 引擎并发创建竞态 (错开即好, LO 天然满足)
+**已闭环记录**: 2026-08-17 ffplay 多实例并行播放 (经验 37) / 2026-08-19 video_open 尺寸修复 (本章 6.2-6.3)
+**探针**: ffplay_window_size_probe (尺寸链, 本章) / ffplay_engine_probe (引擎推进/pause/seek/双实例) / ffplay_inject_probe (注入 SUCCESS) / media_green_probe (双态帧差异)
+**项目级上下文**: 1.6 媒体后端 (默认 ffplay, gst 回退) / 1.6 GL 全禁用 (SDL_FRAMEBUFFER_ACCELERATION=0) / 1.6 诊断开关 (video_open 打印 renderer 后端)
+**补丁纪律**: 改 ffplay_embed.c 必须回填 ffplay_embed.patch (经验 34); compat/ffplay.c 与 SDK 上游 diff=0
 
