@@ -144,7 +144,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置, 一行修复。详见下方 [经验 41 详述](#经验-41-详述) | 08-18 | 高(实测修复) |
 | 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + 两个 bug + 性能问题, 修复优先级已排。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(分析完成, 待实施) |
 | 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 3.0 验证记录 | 08-18 | 高(源码级+实测修复) |
-| 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目 (老会话未隐藏过, 搜 formula 仅 2 处计算/sidebar 配置)。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 (画面只画表格首行) —— UI 验证以 demo 为准。**排查纪律 (2026-08-19 复盘)**: UNO_SILENT 异常进 **debug 级日志** (tag+表达式+消息), 默认 info 不可见 —— "静默失败"现象排查时**第一动作开 ORT_LOG_LEVEL=debug** 看 `UNO exception (silent)` 痕迹, 再下"未生效"结论 | 08-18 | 高(实测) |
+| 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目 (老会话未隐藏过, 搜 formula 仅 2 处计算/sidebar 配置)。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 (画面只画表格首行) —— UI 验证以 demo 为准。**排查纪律 (2026-08-19 复盘)**: UNO_SILENT 异常进 **debug 级日志** (tag+表达式+消息), 默认 info 不可见 —— "静默失败"现象排查时**第一动作开 ORT_LOG_LEVEL=debug** 看 `UNO exception (silent)` 痕迹, 再下"未生效"结论。**[2026-08-19 4.2 实证修正]**: InputLineVisible dispatch 在 Linux 共享内核下破坏 vis=0 初始态导致 UI 复活, 已下沉至 Windows HideUiExtras (Linux 空操作); LO Xvfb 无头环境公式栏默认 vis=0 不显示, 无需 dispatch | 08-18 | 高(实测, 部分认知已修正) |
 
 #### 经验 41 详述
 
@@ -314,6 +314,8 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查)
 - ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植)
 
+## 三、待办/设计
+
 ### 3.0 平台隔离设计验证 (2026-08-18 探针验证)
 
 #### 验证范围
@@ -373,7 +375,7 @@ Impress/Calc/Writer 三 session poller 核心状态(`poll_thread_`/`poll_running
 - ✅ 死锁为包装实现踩契约 (经验 43), 一行修复; **设计本身无需返工**
 - ✅ impress 会话层 `#ifdef` 清零, 探针 impress_nextpage/media_green 复绿
 
-**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。
+**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。**Windows 侧回归完成 (2026-08-19, commit 5832a507)**: 编译零错误 + 探针五段全绿 + demo 全量通过; 回归修复 4 项 (win_platform Plan impress discover AfterReveal→AfterStart / P8 discover 分支补缺 / PptCoreExport Windows 分发恢复 / CMake MSVC -fPIC 顺序), 详见 3.0 目的达成评估。
 
 #### 目的达成评估 (2026-08-18 Windows 回归 + demo 通过后)
 
@@ -475,7 +477,7 @@ struct SessionPlan {
     WindowPoint form;            // 窗口定型(落位/样式)绑定点; None = LO 自管(全屏)
     bool  fullscreen;            // 放映 IsFullScreen (Linux false=窗口化+slot, 经验 1)
     int   settle_ms;             // start 后形态稳定等待 (Win 实测 1200 不够须 2500)
-    bool  ui_hide_needed;        // 全屏放映 LO 自管则 false
+    bool  ui_hide_needed;        // 需 HideUiBlock (setMenuBar 消除1px + hideElement 冗余兜底)
     bool  terminate_on_destroy;  // 每 session 独立进程才 true
 };
 
@@ -607,3 +609,157 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 
 **2026-08-14:**
 - gstreamer 路径清理
+
+---
+
+## 四、平台隔离专项
+
+> 目标: 消除双平台开发的串扰风险, 让任何平台的调优/回归不影响其他平台。
+> 3.3 是设计 (意图/机制分离), 本章节是专项治理记录 (盲区发现 + 修补落地)。
+
+### 4.1 隔离边界总账
+
+| 层 | 隔离状态 | 范式 | 说明 |
+|----|---------|------|------|
+| 窗口发现/定型 (DiscoverWindow/FormWindow) | ✅ 已隔离 | SessionPlan 数据驱动 | 3.3 J1-J3 |
+| 终止策略 (terminate_on_destroy) | ✅ 已隔离 | SessionPlan 数据驱动 | 3.3 J3 |
+| 引导段 (BeginBoot/Release) | ✅ 已隔离 | BootSection RAII | 3.3 J1-J2 |
+| 全屏浮窗 (HideUiFloats) | ✅ 已隔离 | LinkPlatform 虚函数 | Linux 空 / Win 原生 API |
+| **UI 修补 (HideUiExtras)** | ✅ 已隔离 (2026-08-19) | LinkPlatform 虚函数 | 见 4.2 |
+| 模板 (registrymodifications.xcu) | ⚠️ 共享 | 真相源单一份 | 见 4.3 (待评估) |
+
+### 4.2 子项1: UI 隐藏隔离 (2026-08-19 已落地)
+
+#### 问题
+
+Windows 回归 (85aae31f..HEAD) 在 calc_session.cpp 共享层新增 `InputLineVisible` dispatch
+(公式栏隐藏), Linux demo 出现 menubar + 公式栏显示 (此前已通过)。
+
+#### 根因 (4 组对照实验闭合)
+
+| 状态 | 模板 | 代码 | menubar | toolbar | 公式栏 |
+|------|------|------|---------|---------|--------|
+| 85aae31f (回归通过) | 69 item | 旧 (无 InputLineVisible) | 隐藏 | 隐藏 | 隐藏 |
+| HEAD baseline | 126 item | 新 (含 InputLineVisible) | 显示 | 隐藏 | 显示 |
+| 实验1 (模板回退) | 69 item | 新 | 显示 | 显示 | 显示 |
+| 实验2 (代码回退) | 126 item | 旧 | 隐藏 | 隐藏 | 隐藏 |
+
+结论:
+- **InputLineVisible dispatch 是唯一破坏源** (实验1 vs 实验2, 模板无关)
+- **[置信度: 高, debug 日志实证]** LO 在 Xvfb 窗口化模式下 UI 元素默认 vis=0
+  (不显示), HideUiBlock 的 hideElement 是对已隐藏元素的冗余兜底 (非主要机制)。
+  **setMenuBar(null) 非冗余**——消除 impress 1px 底边框 (见下文"UI 隐藏机制实证")
+- **[置信度: 高, debug 日志实证]** HideUiBlock 内的 `.uno:FullScreen` dispatch
+  在 calc/Linux 下 dispatcher NOT found, 从未生效。此前"公式栏靠 FullScreen
+  全屏态自管隐藏"的认知错误
+- **[置信度: 中, 推断]** InputLineVisible dispatch 在 HideUiBlock 之后执行,
+  触发 LO UI 重建, 破坏了 vis=0 初始态, 导致 menubar/公式栏重新显示。
+  模板的 CalcWindowState 条目 (Visible=false) 是"破坏后的兜底", 仅在新代码
+  下起作用 (实验1 vs HEAD baseline 的 toolbar 差异证实)
+
+#### 根本缺陷
+
+平台相关的 UI 修补 (InputLineVisible dispatch) 被放在共享层 (calc_session.cpp),
+其副作用平台相关 (Linux 共享内核破坏 vis=0 初始态, Windows 独立进程不破坏)。
+隔离设计只覆盖"平台机制"层, UI 隐藏逻辑被误当作平台无关。
+
+#### 解决方案: HideUiExtras 下沉
+
+遵循 HideUiFloats 已建立的范式, 新增 `LinkPlatform::HideUiExtras(frame, factory, ctx)`:
+
+| 平台 | 实现 | 行为 |
+|------|------|------|
+| Linux (XvfbSessionPlatform) | 空操作 | LO Xvfb 无头环境 UI 默认 vis=0, 无需平台修补 |
+| Windows (WindowsPlatform) | InputLineVisible dispatch | 搬迁自 calc_session.cpp, 行为不变 |
+
+会话层改动:
+```cpp
+// calc_session.cpp P9 后
+platform_->HideUiExtras(frame_, factory, ctx_);  // 平台自决
+```
+
+#### 改动清单
+
+- `common/link_platform.h`: 新增 HideUiExtras 虚函数 + UNO include
+- `common/linux/xvfb_platform.h`: HideUiExtras 空实现 override
+- `common/windows/win_platform.h`: HideUiExtras 声明 override
+- `common/windows/win_platform.cpp`: HideUiExtras 实现 (InputLineVisible dispatch 搬入)
+- `calc/calc_session.cpp`: InputLineVisible dispatch 块 → platform_->HideUiExtras()
+
+#### 验证
+
+- **Linux**: 2 xlsx + 1 pptx demo, UI 全部干净 (menubar/toolbar/公式栏 隐藏) ✓
+- **Linux impress**: 2 pptx + 1 xlsx demo (ORT_LOG_LEVEL=debug), UI 全部干净 ✓
+- **Windows**: 行为不变 (InputLineVisible dispatch 逻辑原样搬迁, 仅日志前缀改) — 待 Windows 侧回归确认
+- **隔离保证**: Linux 改 HideUiExtras 实现 (空) 不影响 Windows; Windows 改 HideUiExtras 实现不影响 Linux
+
+#### UI 隐藏机制实证 (2026-08-19 debug 日志, 置信度: 高)
+
+`ORT_LOG_LEVEL=debug` 跑 calc (2 xlsx) + impress (2 pptx) 验证 HideUiBlock 内部行为:
+
+**[置信度: 高, debug 日志实证]** LO 在 Xvfb 窗口化模式下 UI 元素默认 vis=0 (不显示):
+- calc/impress 的 state[before] 全部 vis=0, state[after] 全部 vis=0
+- menubar/toolbar_std/toolbar_fmt/toolbar_draw/statusbar/sidebar/sidebar_props 均如此
+- HideUiBlock 的 hideElement 是对已隐藏元素的冗余兜底 (非主要机制)
+
+**[置信度: 高, debug 日志实证]** HideUiBlock 内 `.uno:FullScreen` dispatch 在 calc/Linux
+和 impress/Linux 下均 `dispatcher NOT found`, 从未生效。此前"FullScreen 全屏态自管隐藏 UI"
+的认知错误。FullScreen dispatch 在 Xvfb 无头环境下是死代码 (desktop_ provider 找不到此 dispatch)。
+
+**[置信度: 高, 探针实证]** HideUiBlock 内 setMenuBar(null) 非冗余——消除 impress 1px 底边框:
+- 6 次探针实验 (ui_1px_probe + 像素分析) 闭合验证:
+  - V1 (无 HideUiBlock): impress row[-1] = (0,0,0) 纯黑, 1px 边框出现
+  - 步骤1 (完整 HideUiBlock): 1px 消失
+  - 复现 (无 HideUiBlock): 1px 再次出现
+  - V2 (无 HideUiBlock + 2500ms 独立 sleep): 1px 仍出现 → sleep 时序无关
+  - V3a (只 setMenuBar, 无 hideElement): 1px 消失 → setMenuBar 是消除 1px 的子动作
+- 机制: setMenuBar(null) 移除 LO 窗口的 menubar 容器, 触发窗口重绘/布局调整,
+  消除初始化过渡期的 1px 底边框
+- hideElement 和 sleep 对 1px 无效 (V2 + V3a 间接证明)
+
+**[置信度: 高, debug 日志实证]** 多文档并发无竞态:
+- 2 calc + 2 impress 交错执行 HideUiBlock, 各 frame 的 setMenuBar(null)/hideElement 互不影响
+- frame 隔离: 各会话 container pos/size 不同 (不同 slot), setMenuBar 对各自 frame 操作
+- frame_active 状态可能不同 (后创建的 frame 被激活), 但 UI 元素 vis 一致 (全 0)
+
+**[置信度: 中, 推断]** LO Xvfb 无头环境 UI 默认 vis=0 的原因:
+- 推测 LO 在无头/无桌面环境下不构建 UI 元素 (VCL 后端不渲染)
+- HideUiBlock 的 hideElement 是为有头环境 (Windows 独立桌面) 准备的防御性代码
+- setMenuBar 消除 1px 的间接效果可能在 Windows 下也有效 (待 Windows 侧验证)
+- 此推断无法在 Linux 侧验证 (Linux 只用 Xvfb), 需 Windows 侧 debug 日志确认
+
+### 4.3 待评估子项
+
+#### 4.3.1 模板隔离
+
+当前模板 (registrymodifications.xcu) 是共享真相源 (NovaPlayerTools/templates/user/),
+双平台共用一份。实验2 证明模板在旧代码 (无 InputLineVisible) 下无影响 (LO Xvfb 默认
+vis=0, 模板条目被覆盖), 但在新代码 (含 InputLineVisible, 触发 UI 重建) 下起兜底作用。
+
+评估点:
+- 是否需要平台分叉 (templates/linux/ vs templates/windows/)?
+- 或保持共享但明确"模板是共享的, 改动需双平台验证"?
+- 当前结论: 保持共享, 纳入"共享层改动需双平台回归"规则 (见 4.4)
+
+#### 4.3.2 隔离契约文档化
+
+3.3 已有 LinkPlatform 接口定稿形态 (D), 需补全:
+- HideUiExtras 接口契约
+- 隔离边界总账 (4.1 表格) 的维护规则
+- "哪些改动是平台安全的 (只改平台实现), 哪些是双平台共享的 (改共享层需双平台验证)"
+
+### 4.4 隔离回归规则
+
+| 改动位置 | 回归范围 | 示例 |
+|---------|---------|------|
+| 平台层 (common/linux/, common/windows/) | 单平台 | xvfb_platform.cpp / win_platform.cpp |
+| 共享层 (calc_session.cpp, link_utils.cpp, impress_session.cpp) | **双平台** | 任何会话逻辑改动 |
+| 共享模板 (templates/user/) | **双平台** | registrymodifications.xcu |
+| 平台接口 (link_platform.h) | **双平台** | 新增/修改虚函数 |
+
+### 4.5 反模式 (不做)
+
+- 在共享层调用平台专属 dispatch (如 InputLineVisible 是 calc/Windows 专属, 不应在 calc_session.cpp)
+- 假设"平台机制隔离了 = UI 隔离了" (UI 隐藏副作用是平台相关的)
+- 为统一而统一 (Linux 不需要 InputLineVisible, 不应为了"对齐"而在 Linux 也调用)
+
