@@ -145,6 +145,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 | 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + P3-P8 新发现。FramePump 组件统一帧泵, 阶段0-4 全部落地, 三链接入收官。详见下方 [经验 42 详述](#经验-42-详述) | 08-18 | 高(阶段0-4全部完成) |
 | 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 3.0 验证记录 | 08-18 | 高(源码级+实测修复) |
 | 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目 (老会话未隐藏过, 搜 formula 仅 2 处计算/sidebar 配置)。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 (画面只画表格首行) —— UI 验证以 demo 为准。**排查纪律 (2026-08-19 复盘)**: UNO_SILENT 异常进 **debug 级日志** (tag+表达式+消息), 默认 info 不可见 —— "静默失败"现象排查时**第一动作开 ORT_LOG_LEVEL=debug** 看 `UNO exception (silent)` 痕迹, 再下"未生效"结论。**[2026-08-19 4.2 实证修正]**: InputLineVisible dispatch 在 Linux 共享内核下破坏 vis=0 初始态导致 UI 复活, 已下沉至 Windows HideUiExtras (Linux 空操作); LO Xvfb 无头环境公式栏默认 vis=0 不显示, 无需 dispatch | 08-18 | 高(实测, 部分认知已修正) |
+| 45 | **C ABI 重复 Destroy UAF 防护**: C ABI `ImpressSessionDestroy` / `CalcSessionDestroy` 直接 `delete static_cast<...*>(session)`, 重复调用时悬垂指针 → use-after-free → SIGABRT (确定性必现)。修复: C ABI 层加 `std::unordered_set<void*>` 活跃指针跟踪 + mutex 保护, Create 时 insert, Destroy 时 find+erase, 不在集合中则 no-op (已销毁)。代码: impresslink.cpp / calclink.cpp。失效条件: 改用智能指针管理 session 生命周期时本防护可移除 | 08-20 | 高(确定性必现, 已修复) |
 
 #### 经验 41 详述
 
@@ -1128,4 +1129,33 @@ PASS: ffplay log 落盘 (4357 字节, flush_on 修复 0 字节问题) + 日志�
 - **ffplay_embed.c L1818 fprintf**: 保留 (上游残留)
 
 **已知小问题**: [FFmpeg/ffmpeg] 后偶尔空消息 (ffmpeg 退出路径 av_log(NULL, AV_LOG_QUIET, "") 触发, 不影响功能)
+
+---
+
+## 七、已知漏洞 [待修] (updated 2026-08-20)
+
+> 攻击性测试发现的未修复漏洞。已修复的漏洞沉淀为"二、历史经验" (如经验 45)。
+> 本章节的漏洞待修复后, 对应条目移入经验并标注"已修复"。
+
+### V1: Destroy 与帧泵竞态 (竞态崩溃)
+
+- **严重度**: ★★ (竞态依赖时序, 组合运行确凿崩溃)
+- **现象**: 8 线程并发 `Create→Start→sleep(3~8ms)→Destroy` 时, `EXIT=134` (SIGABRT), 报错 `IllegalArgumentException` + 核心转储
+- **根因分析**: `Destroy()` 在 `mu_` 之外 `reset platform_` / `pump_`, 而 `FramePump::PollThread` 持 `frame_mutex_` 运行 `frame_fn_` (即 `CaptureFrame`, 触及 `platform_`)。两把锁 (`mu_` vs `frame_mutex_`) 不重合, 存在窗口期。但 `FramePump::Stop()` 是同步 join 的, 根因可能更深 — 共享内核模式下多 session UNO 对象生命周期交错 (非简单锁问题)
+- **关联经验**: 42 (FramePump 契约, P3 锁纪律 `frame_mutex_→mu_`) / 43 (BootLock 同源串行化弱点)
+- **修复方向**: Destroy 内确保 UNO clear 在 `pump_->Stop()` join 后执行; `frame_mutex_` 保护 `platform_` 最后使用点; 或深入分析共享内核 UNO 生命周期
+
+### V2: 高频 resize 风暴卡死 (确定性卡死)
+
+- **严重度**: ★ (压力测试场景, 非正常使用)
+- **现象**: 5000 次无停顿 `ImpressSessionSetResolution` 调用 → `EXIT=124` (超时)
+- **根因**: `SetWindowSize` 的 XShm 段反复申请/释放/重建, 在 Xvfb 无 GPU + 软件渲染路径下串行阻塞加重。对比单次非法尺寸 (0/负/32768/INT_MAX) **均未崩溃**, 说明崩溃点集中在"无停顿高频 resize" 而非参数校验
+- **修复方向**: `SetWindowSize` 节流/去抖/最小间隔; 或串行于帧泵
+
+### V3: 快速 teardown-recreate 卡死 (确定性卡死)
+
+- **严重度**: ★ (压力测试场景, 非正常使用)
+- **现象**: 200 轮 `Create→Start→Destroy` (即 `delete this`) 后立即再次 `Create` → `EXIT=124` (超时)
+- **根因**: 堆分配器极可能复用同一地址, `Destroy` 触发的 `BootLock`/profile seed 在快速 teardown-recreate 节奏下发生级联阻塞。根因部分与经验 43 (BootLock) 同源, 需进一步证实
+- **修复方向**: Destroy 内确保 BootLock/profile seed 完全释放后再返回; 或限制 Create 频率
 
