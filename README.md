@@ -6,7 +6,7 @@
 
 ---
 
-## 一、项目现状
+## 一、项目现状 [参考] (updated 2026-08-19)
 
 ### 1.1 架构
 
@@ -126,7 +126,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 
 ---
 
-## 二、历史经验(勿回退;编号被代码注释引用)
+## 二、历史经验(勿回退;编号被代码注释引用) [经验·永久] (updated 2026-08-19)
 
 > 时间=提出/验证时间;置信度:高=源码级或多次实测,中=单次实测,低=推断。
 
@@ -284,6 +284,36 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 |---|---|---|---|
 | 40 | **user 模板机制 + office-link 命名定稿**:UI 控制三层优先级 / 命名 / 模板净化 / 消费语义 / 孤儿文档锁坑 / sidebar+statusbar 存储位置与部署陈旧坑(⑦⑧)。详见下方 [经验 40 详述](#经验-40-详述) | 08-18 | 高(实证) |
 | 38 | **writer 渲染方案可行性**:docx→PDF→Draw→XSlideRenderer→BGRA 全 UNO 自治 / 接口细节 / 性能 / 缓存 / 上层接线 / 质量收尾。详见下方 [经验 38 详述](#经验-38-详述) | 08-17 | 高(实测) |
+| 39 | **Windows 平台差异定稿**:per-session 独立 soffice + 隐藏桌面 (`SALTMPSUBFRAME`) + `IsFullScreen=true` (LO 自管窗口, 无菜单栏/标题栏) + 双平台日志同款实现 (Linux office_runtime.cpp spdlog / Windows common/win_office_log.cpp) — 与 Linux 共享内核模式正交的设计分支。代码引用: writer_session.h:6 / impress_session.cpp:7 / impress_session.h:24 / link_platform.h:6 / win_platform.cpp:156 / log.h:12 / common/CMakeLists.txt:16 / office_runtime.h:19 | 08-19 | 高(架构定稿) |
+
+#### 关键经验失效条件 (2026-08-20 补充)
+
+> 每条经验都基于特定技术假设。当假设失效时, 经验需重新评估。以下列出关键经验的失效触发条件, 便于维护者判断何时该重新审视。
+
+| 经验 | 失效条件 | 重新评估方向 |
+|---|---|---|
+| **1** (Xvfb 大屏+slot) | 迁移到 Wayland / X server 改用 compositing | Wayland 下窗口遮挡语义不同, slot 方案可能不需要 |
+| **19b** (Xvfb 恒无 GPU) | Xvfb 配置 GPU 加速 / 改用 DRM/KMS | 软件渲染定论失效, 需重新评估 GL 路径 |
+| **21** (GL 转场必崩) | SAL_DISABLEGL 不再有效 / LO 改 GL 实现 | 禁 GL 决策需重新验证 |
+| **25** (libstdc++ 6.0.30) | SDK 升级带新 libstdc++ / 系统更新 | SONAME 单例陷阱仍存在, 但版本号需更新 |
+| **29/30** (ffplay 注入) | LO 源码 mediawindow_impl.cxx 改后端选择逻辑 | ORT_MEDIA_BACKEND 环境变量开关可能失效 |
+| **34** (ffplay_embed.patch) | FFmpeg 上游 ffplay.c 大改 / patch 冲突 | 需重新生成 patch, 评估是否仍可行 |
+| **37** (多实例并行) | SDL2 改渲染器选择逻辑 / 多线程行为变更 | SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer 可能不再必要 |
+| **39** (Windows 平台差异) | Windows LO 内核架构变更 / 改用共享内核 | per-session 独立 soffice + 隐藏桌面方案需重新设计 |
+| **42** (FramePump) | 改用其他帧泵机制 / LO 提供 UNO 动画状态接口 | 静止检测两阶段方案需重新评估 |
+| **43** (BootLock 死锁) | BootLock 构造函数不再执行 Lock() | 包装层契约需重新验证 |
+
+#### 零引用经验清单 (2026-08-20 审查)
+
+> 以下经验在代码注释中无引用 (grep `经验 N` 命中 0 次), 但仍保留在第二章。原因: 编号锚定不可删 (未来代码可能引用); 经验本身仍承重 (踩坑风险仍在, 只是当前代码未引用)。维护时可优先考虑合并/降级这些经验。
+
+**零引用经验**: 2 / 3 / 4 / 6 / 7 / 8 / 9 / 10 / 11 / 12 / 13 / 14 / 15 / 19c / 19d-g / 20 / 29 / 36 (共 19 条)
+
+**说明**:
+- 经验 19 基类 0 引用, 但变体 19b 有 6 处引用、19c/19d-g 完全 0 引用。19 的正文 (弯路勿重走 5 条) 已被 19b/19c/19d-g 完全拆分继承, 可考虑把基类 19 归并进 19b 并删除基类条目。
+- 经验 13/14/15 (XShm 抓帧三件套) 虽 0 代码引用, 但实现已落地于 xvfb_platform 抓帧路径, 可改为附在 xvfb_platform.cpp 注释中作为"背景来源"。
+- 经验 19d-g 自身注释已标注"已被 29/30 取代", 本身即承认零活引用, 可降级为附录"探索历程备查"。
+- 完整代码引用审查报告见 git 历史 commit (2026-08-20 调研)。
 
 #### 经验 40 详述
 
@@ -346,79 +376,19 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 - ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查)
 - ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植)
 
-## 三、待办/设计
+## 三、设计/待办 [设计+待办] (updated 2026-08-20)
 
-### 3.0 平台隔离设计验证 (2026-08-18 探针验证)
+### 3.0 平台隔离设计验证 — 已闭环 (2026-08-18)
 
-#### 验证范围
-按 HANDOFF.md 3.3 平台隔离设计，仅修改 impress 会话层实现平台隔离骨架，不动平台层实现细节。
+> 历史验证段已归档; 关键沉淀已分别落入 **经验 43** (BootLock 死锁根因)、**3.3** (设计规格)、**1.6** (当前状态)、**已闭环事项** (commit 5832a507 Windows 回归)。
 
-#### 修改内容
-1. **link_platform.h**: 添加平台隔离设计新接口
-   - `enum class WindowPoint { None, BeforeReveal, AfterReveal, AfterStart }`
-   - `struct SessionPlan` (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy)
-   - `class BootSection` (RAII 引导段串行化)
-   - `LinkPlatform` 新增虚函数: Plan()/BeginBoot()/DiscoverWindow()/FormWindow()/ApplyNativeFullscreen()/OnSessionEnd()
-
-2. **xvfb_platform.h**: 实现 Linux 平台层新接口
-   - `LinuxBootSection` 包装 `OfficeRuntime::BootLock`
-   - `XvfbSessionPlatform::Plan()` 返回 Linux 策略 (discover=AfterReveal, form=AfterStart, fullscreen=false, settle_ms=2500, ui_hide_needed=true, terminate_on_destroy=false)
-   - 新接口复用现有实现 (DiscoverWindow=FindWindow, FormWindow=SizeWindowToSlot)
-
-3. **impress_session.cpp**: 重构使用新接口，清除 `#ifdef __linux__`
-   - Create() 按 P0-P10 协议重构 (平台隔离设计 3.3 C)
-   - Destroy() 使用 OnSessionEnd() 钩子替代 `#ifdef _WIN32` terminate
-   - Start() 清除 Windows 特定代码 (ORT_IMPRESS_FULLSCREEN 处理待平台层实现)
-   - 删除 UI 自省诊断代码 (移到可选)
-
-#### 验证结果
-- ✅ **编译通过**: 所有 target 编译成功
-- ✅ **单测通过**: office_runtime_test 50/50 全绿
-- ❌ **探针验证失败**(初版): impress_nextpage_probe 和 media_green_probe 卡死在 BootLock::Lock() —— **已定位为双重加锁并修复, 复跑全绿**(见根因分析/经验 43)
-
-#### 遇到的问题
-**BootLock 死锁**: 探针在输出 `[impress] Plan: discover=2 form=3 fullscreen=0 settle_ms=2500 ui_hide=1 terminate=0` 后卡死，日志显示 BootLock::Lock() 被调用但未返回。
-
-#### 根因分析 (2026-08-18 修订, 双重加锁实锤)
-**真根因**: `OfficeRuntime::BootLock` 的**构造函数本身即执行 `Lock()`**
-(office_runtime.cpp:561-564)。LinuxBootSection 以成员形式持有 BootLock
-(成员构造时已持锁), 构造函数体又调了一次 `boot_lock_.Lock()` → 同线程对
-`static std::mutex s_proc_mutex` 二次 lock → **非递归 mutex 立即自死锁**。
-佐证: 卡死无任何日志(进程内 mutex 路径无日志); 60s 信号量强超时不起作用
-(超时只在 sem 等待路径)。**不是"RAII 包装有风险", 是忽略了一个隐蔽契约。**
-修复: 构造函数 `= default`(一行), 成员构造即持锁, 勿再手动 Lock。
-~LinuxBootSection → Release() 与成员析构的双重 Unlock 安全
-(Unlock 幂等: sem_ 置 SEM_FAILED / mtx_ 置 nullptr 后再调为 no-op)。
-
-#### 经验编号: 43
-**BootLock 构造即加锁 + 非递归 mutex 自死锁 (2026-08-18)**: `BootLock` 构造函数
-= Lock(), 析构 = Unlock()。包装它的 RAII 类**不得在构造函数体再调 Lock()** ——
-同线程二次 lock 非递归 mutex 立即永久死锁, 无日志、不受 60s 信号量超时保护
-(超时只在跨进程 sem 路径), 极易误判为"包装本身有风险"。判别特征: 卡死点静默
-无输出。一般化教训: **包装"构造即获取"型 RAII 资源时, 包装层构造函数必须为空**;
-若资源只有显式 Lock 形态, 包装层才负责调 Lock。修复后探针复绿
-(impress_nextpage / media_green 全过, 2026-08-18 19:18)。
-
-#### 设计验证结论 (2026-08-18 修订)
-**平台隔离设计骨架验证成功**:
-- ✅ 接口设计合理, 编译通过 (SessionPlan/WindowPoint/BootSection/新虚函数全落地)
-- ✅ SessionPlan 数据驱动机制正常工作 (plan 日志可观测)
-- ✅ 协议 P0-P10 逻辑正确 (Release 绑定点 = P5 后, 与原 Unlock 位置语义一致)
-- ✅ 死锁为包装实现踩契约 (经验 43), 一行修复; **设计本身无需返工**
-- ✅ impress 会话层 `#ifdef` 清零, 探针 impress_nextpage/media_green 复绿
-
-**后续**: 3.3 J 迁移路径已于 2026-08-18 全量实施完毕 (J2 Windows impress 新接口落地 / J3 calc 重构含 F 反序 / J4 writer G 缝 KernelHost)。**Linux demo 回归通过 (2026-08-18)**: 修复 xvfb_platform Plan() 写死 impress 策略的 bug (calc form=AfterReveal, impress form=AfterStart), 2 xlsx 黑屏消失; 日志前缀标准化 ([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow])。**Windows 侧回归完成 (2026-08-19, commit 5832a507)**: 编译零错误 + 探针五段全绿 + demo 全量通过; 回归修复 4 项 (win_platform Plan impress discover AfterReveal→AfterStart / P8 discover 分支补缺 / PptCoreExport Windows 分发恢复 / CMake MSVC -fPIC 顺序), 详见 3.0 目的达成评估。
-
-#### 目的达成评估 (2026-08-18 Windows 回归 + demo 通过后)
-
-**平台隔离 3.3 的五项目的逐项核验**:
-
-- ✅ **会话层零 `#ifdef`**: calc/impress/writer 剩余 `#ifdef` 均为编译机制类 (windows.h/FindWindow 宏 include, 3.3 E 表"可留"), 逻辑分支全部 plan 数据驱动
-- ✅ **平台差异安放 (意图/机制分离)**: Windows 回归发现的 4 个问题**无一在会话层平台分支** —— win_platform Plan() 数据错 (平台层, 2026-08-18 修 AfterReveal→AfterStart)、核心 P8 discover 分支遗漏 (协议实现遗漏, 非设计缺陷, 补 5 行)、PptCoreExport Windows 分发被清理误删 (上层 NovaOfficeCore, 非本模块)、vcxproj 失效引用 (构建) —— **协议化核心在双平台行为一致**
-- ✅ **变体点可枚举**: SessionPlan 一眼看清两平台差异 (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy); calc 反序 (F 用例) 与 impress 全屏作为 plan 数据落在平台层, 核心同一条代码
-- ✅ **构造性保证 (构建期)**: 平台隔离新接口 Windows 编译零错误; 改核心语法上碰不到平台代码
-- ✅ **行为期保证**: Windows conformance 探针五段全绿 (CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT, rc=0 零残留) + NovaPlayerDemo calc/impress 全量回归通过 (菜单栏/工具栏/状态栏/滚动条/公式栏全部隐藏)
-- ⚠️ **诚实边界**: 无 Windows CI (3.3 I 明示); FramePump 接入待 Windows 侧回归确认 (经验 42 阶段2-4 Linux 已收官); 模板部署保障 (CopyFile.bat) 待打包流程加项 (3.1)
+**目的达成评估** (2026-08-19 Windows 回归 + demo 通过后核验):
+- ✅ 会话层零 `#ifdef` (逻辑分支): calc/impress/writer 剩余 `#ifdef` 均为编译机制类 (windows.h/FindWindow 宏 include, 3.3 E 表"可留")
+- ✅ 平台差异安放: Windows 回归 4 个问题无一在会话层平台分支
+- ✅ 变体点可枚举: SessionPlan 一眼看清两平台差异 (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy)
+- ✅ 构造性保证 (构建期): Windows 编译零错误
+- ✅ 行为期保证: Windows conformance 探针五段全绿 (CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT, rc=0) + NovaPlayerDemo 全量回归
+- ⚠️ 诚实边界: 无 Windows CI; FramePump 待 Windows 侧回归确认; 模板部署保障 (CopyFile.bat) 待打包流程加项 (3.1)
 
 ---
 
@@ -430,9 +400,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 |---|---|---|
 | ★★ | **user 模板部署保障 (2026-08-18, 两平台)**: 模板 = 仓库 `templates/user/registrymodifications.xcu` (净化, 经验 40) → 部署 `office/program/templates/`。**Linux**: office_runtime POST_BUILD 自动拷贝 (构建时) ✓ 无需脚本; **Windows**: 不构建 office_runtime, **NovaPlayer 打包脚本 (CopyFile.bat 等) 需加 templates/ 拷贝项** —— 缺失时 WindowsPlatform::PrepareEnvironment seed 失败 → LO 默认 UI (2026-08-18 探针实测, 已手动部署当前环境) | 打包流程 |
 | ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
-| ~~★★~~ | ~~经验 42 FramePoller 治理落地~~ → **已完成 (2026-08-19)**: FramePump 组件统一帧泵, 阶段0-4 全部落地 (impress/writer/calc 接入收官), 删除所有 per-session poller 重复; 单测 15/15 全绿; demo 回归通过。详见经验 42 详述 | 完成 |
 | ★ | **经验 42 阶段5 (可选)**: 平台层段内比对 (CaptureFrame 增量 unchanged 参数) + dedupe + calc zoom 维度 A/B; 开放问题 A (帧新鲜度 TTL) / B (calc tick 20ms 延迟接受度) 待 NovaPlayer 侧验证 | 远期优化 |
-| ~~★~~ | ~~平台隔离 Windows 侧回归~~ → **已完成 (2026-08-19)**: 编译零错误 + 探针五段全绿 + demo 通过 (见 1.6 Windows 平台隔离回归); 回归发现修复 4 项 (Plan 数据/协议遗漏/上层分发/构建) — 无一在会话层平台分支 (3.3 目的达成评估见 3.0) | 完成 |
 | ★★ | ffplay 能力增强(按需):XFrameGrabber 帧抓取/硬解/媒体信息 | 引擎底座就绪 |
 | ★ | ffplay 引擎并发创建竞态(错开即好,LO 天然满足;紧邻创建场景需引擎内串行化) | 按需 |
 
@@ -442,7 +410,6 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 |---|---|---|
 | ★★ | 2160p 混合分辨率落位产品化验证(默认配置已支持) | 配置验证 |
 | ★★ | slot 管理策略(超限语义/动态轮替/最大并发数) | 策略决策 |
-| ~~★~~ | ~~Windows impress 平台补全 + Windows 编译验证~~ → **已完成 (2026-08-19)** (平台隔离回归, 见 1.6) | 完成 |
 | ★ | win_platform seed 的窄字符 fs 调用 u2w 化(中文用户名路径风险, 与 md5 原问题同源, 2026-08-18 检视发现属遗留非新引入) | 平台补全 |
 | ★ | 环境自检(字体/音频缺失明确报错)与崩溃检测告警 | 部署稳健性 |
 
@@ -655,7 +622,7 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 
 ---
 
-## 四、平台隔离专项
+## 四、平台隔离专项 [设计+经验] (updated 2026-08-19)
 
 > 目标: 消除双平台开发的串扰风险, 让任何平台的调优/回归不影响其他平台。
 > 3.3 是设计 (意图/机制分离), 本章节是专项治理记录 (盲区发现 + 修补落地)。
@@ -806,17 +773,9 @@ vis=0, 模板条目被覆盖), 但在新代码 (含 InputLineVisible, 触发 UI 
 - 假设"平台机制隔离了 = UI 隔离了" (UI 隐藏副作用是平台相关的)
 - 为统一而统一 (Linux 不需要 InputLineVisible, 不应为了"对齐"而在 Linux 也调用)
 
-### 4.6 关联索引
-
-**关联经验**: 32 (平台层归组重构, common/{linux,windows}) / 40 (user 模板机制, 4.3 模板隔离) / 43 (BootLock 死锁, BeginBoot RAII) / 44 (Windows 回归, 1.6)
-**关联待办**: 3.1 user 模板部署保障 (Windows 打包脚本) / win_platform seed u2w 化 (3.2)
-**已闭环记录**: 2026-08-18 平台隔离骨架+全量实施 (已闭环事项) / 2026-08-19 UI 隐藏专项+Windows 回归 (已闭环事项)
-**设计文档**: 3.3 (LinkPlatform 接口定稿形态 D) / 3.0 (验证记录)
-**writer 例外**: 无平台层 (经验 38 定案, G 缝 = link_utils::KernelHost 引导缝)
-
 ---
 
-## 五、帧泵专项
+## 五、帧泵专项 [设计] (updated 2026-08-19)
 
 > 对应经验 42。契约/缺陷映射/三链形态/迁移路径见 [经验 42 详述](#经验-42-详述);
 > 本章收录设计决策论证、性能预算、测试矩阵等深度内容 (源自原始设计稿, 已落地)。
@@ -894,85 +853,35 @@ calc 的 UNO 视口查询从"每 5ms 无条件"变为"每 tick 一次、心跳�
 - **A. 帧新鲜度 TTL**: 消费方 (取帧链) 是否存在"末帧超时视为无帧"? 决定心跳保留 (近零成本) or 静止静默 (收益最大); 以及 hbp 三链统一值。验证手段: NovaPlayer PlayerItem.getVideoFrame 侧读帧逻辑确认。无论答案如何, 阶段0-4 不需要该答案 (dedupe 无内容风险, 心跳保留现状)。
 - **B. calc tick 20ms 滚动延迟接受度** (最坏 +15ms): 接受 / 改 10ms (+5ms) / A/B 探针实测后定。默认 20ms, plan 一处可改。
 
-### 5.6 关联索引
-
-**关联经验**: 41 (暂停→恢复翻页失效, 泵 Start 契约承接) / 42 (FramePoller 共性分析, 本章主体) / 38⑦ (writer 停止后取帧黑屏, 泵全状态 UpdateFrame 承接) / 13 (XShm 性能基准, 性能预算依据)
-**关联待办**: 3.1 经验 42 阶段5 (平台层段内比对 + dedupe + calc zoom A/B, 可选远期)
-**已闭环记录**: 2026-08-19 阶段0-4 + Start 契约回归修复 (已闭环事项, 含各阶段配置参数)
-**探针**: impress_nextpage / impress_multi (并发) / media_green (双态) / writer_probe / ffplay_engine (引擎推进)
-**正交关系**: 与 3.3 平台隔离设计正交 (FramePump 是 common 基础设施, 不触碰 LinkPlatform); 唯一交点 = 阶段5 CaptureFrame(+unchanged) 走 3.3 接口变更流程
-
 ---
 
-## 六、FFplay 嵌入专项
+## 六、FFplay 嵌入专项 [经验+设计] (updated 2026-08-20)
 
 > ffplay 嵌入引擎 (office_runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 的尺寸链治理。
 > 关联经验 34 (补丁式复用)、19b (软件渲染/Xvfb 无 GPU)、37 (并发创建竞态)。
 > 探针: xvfb_calc_demo/ffplay_window_size_probe.cpp (engine 组, 直接验证引擎)。
 
-### 6.1 问题: video_open 硬编码 640x480
+### 6.1 video_open 尺寸修复 — 已闭环 (2026-08-19)
 
-ffplay_embed.c `video_open()` 用 `default_width/default_height` (640x480) 设置 `is->width/is->height`, 这两个值决定 `calculate_display_rect()` 的视频绘制矩形。嵌入模式下 `screen_width/screen_height=0`, 所以 `w = default_width = 640, h = default_height = 480`, 与外部 X11 窗口实际尺寸无关。
+> 修复后无回归。详细尺寸链/探针验证见 git 历史 commit + ffplay_window_size_probe.cpp。
 
-**影响**: 视频绘制矩形基于 640x480 计算, 当 LO 媒体窗口尺寸 ≠ 640x480 时, 视频在窗口内位置/缩放错误 (letterbox/pillarbox 计算基于错误尺寸)。
+**问题**: ffplay_embed.c `video_open()` 用 `default_width/height` (640x480) 设置 `is->width/is->height`, 嵌入模式下与外部 X11 窗口实际尺寸无关, 视频位置/缩放错误。
 
-**尺寸链 (LO → ffplay)**:
-1. LO `mediawindow_impl.cxx` Resize(): `mpChildWindow->SetPosSizePixel(Point(0,0), aPlayerWindowSize)` 创建媒体子窗口
-2. LO `createPlayerWindow()`: aArgs[0] = `GetParentWindowHandle()` (父窗口 X 句柄), aArgs[1] = `Rectangle(0,0,aSize.W,aSize.H)` (尺寸)
-3. ffplay_player.cxx `createPlayerWindow()`: 解析 aArgs[0] = parent, aArgs[1] = rect; **rect 被忽略**, 只传 parent 给 `ffplay_engine_create`
-4. ffplay_embed.c `ffplay_engine_create()`: `SDL_CreateWindowFrom(parent)` (首次 video_open)
-5. video_open: `is->width = default_width = 640` ← **bug: 应读 SDL 窗口实际尺寸**
+**尺寸链** (LO → ffplay): mediawindow_impl.cxx Resize → createPlayerWindow aArgs[0]=parent / aArgs[1]=rect → ffplay_player.cxx 解析 (rect 被忽略) → ffplay_engine_create → SDL_CreateWindowFrom → video_open `is->width=default_width=640` ← **bug**。
 
-### 6.2 修复 (方案A, 2026-08-19 落地)
+**修复 (方案A)**: video_open renderer 创建后加 `SDL_GetWindowSize(is->window, &w, &h)` 替代 640x480 硬编码。技术依据: SDL X11 驱动 `X11_CreateWindowFrom → SetupWindowData → XGetWindowAttributes` 设置 window->w/h (SDL2 源码实证)。修改文件: ffplay_embed.c (video_open) + ffplay_embed.patch 回填 (经验 34)。
 
-`video_open()` 的 `if (!is->window)` 块内, renderer 创建成功后加 `SDL_GetWindowSize(is->window, &w, &h)` 覆盖 w/h:
+**验证**: ffplay_window_size_probe (engine 组, 三方对比 期望/X11/ffplay, 500x300 故意 ≠ 640x480)。修复后 PASS: 三方一致。Demo 含视频 pptx 视频尺寸正确。
 
-```c
-window = is->window;
-renderer = is->renderer;
-SDL_GetWindowSize(is->window, &w, &h);  // 替代 default_width/height (640x480)
-```
+**开放问题 (升级路径)**: 方案A 仅首次创建, 运行时 X11 resize 不感知 (放映期尺寸固定为常见场景)。升级路径: 方案B (`ffplay_engine_set_window_size` API + `PlayerWindowShell::setPosSize` 调用) / 方案C (SDL_WINDOWEVENT_RESIZED 事件监听)。
 
-**技术依据**: SDL X11 驱动 `X11_CreateWindowFrom` → `SetupWindowData` 用 `XGetWindowAttributes` 设置 `window->w/h`, 故 `SDL_GetWindowSize` 返回值 = X11 窗口真实尺寸 (SDL2 源码 `SDL_x11window.c` 实证)。
+### 6.5 关联索引 (六、FFplay 嵌入专项)
 
-**局限 (开放问题)**: 仅首次创建时获取; 运行时 X11 resize 不感知 (SDL 缓存的 window->w/h 不会自动更新, `PlayerWindowShell::setPosSize` 是 no-op)。放映期媒体窗口尺寸通常固定, 列为开放问题。
-
-**修改文件**: ffplay_embed.c (video_open) + ffplay_embed.patch 回填 (经验 34 纪律)。
-
-### 6.3 探针验证 (严格例证)
-
-**探针**: `ffplay_window_size_probe.cpp` (engine 组, 直接调 ffplay_engine API, 不经过 LO/soffice)
-- 加 `ffplay_engine_get_window_size(handle, int* w, int* h)` API (ffplay_engine.h + ffplay_embed.c + patch 回填) 读取 `is->width/is->height`
-- 三方对比: 期望 (探针创建的 X11 窗口) / X11 (XGetWindowAttributes 实测) / ffplay (engine 内部 is->width/height)
-- 默认 500x300 (故意 ≠ 640x480 以暴露 bug)
-
-**修复前基线** (2026-08-19):
-```
-期望: 500x300 | X11: 500x300 | ffplay: 640x480
-ffplay == 640x480 硬编码: YES (BUG 确认)
-```
-
-**修复后** (2026-08-19):
-```
-期望: 500x300 | X11: 500x300 | ffplay: 500x300
-ffplay == X11: YES (尺寸链一致)
-结论: PASS — 硬编码已修复
-```
-
-**Demo 回归** (2026-08-19): 含视频 pptx 放映, 视频尺寸正确, 修复闭环。
-
-### 6.4 开放问题
-
-- **运行时 resize**: 方案A 仅首次创建; 若放映期媒体窗口被 LO resize (如放映窗口尺寸变化), ffplay 的 is->width/height 不会更新。升级路径: 方案B (ffplay_engine_set_window_size API + PlayerWindowShell::setPosSize 调用) 或方案C (SDL_WINDOWEVENT_RESIZED 事件监听)。放映期尺寸固定为常见场景, 暂不升级。
-- **aArgs[1] rect 未使用**: ffplay_player.cxx 解析了 aArgs[1] (LO 期望尺寸) 但未传给引擎。方案B 可让引擎直接接收 LO 权威尺寸, 绕过 SDL_GetWindowSize 的局限。但方案A 已解决核心问题 (首次创建), 方案B 为可选优化。
-
-### 6.5 关联索引
-
-**关联经验**: 17 (gst 崩溃链, ffplay 替代基础) / 18 (gst 修复, 回退路径) / 19 (弯路勿重走, ffplay 软解定论) / 28 (gst 依赖检测, ffplay 价值=无 gst 时播放) / 29 (ffplay 正规注入 SDK 模式) / 30 (媒体后端开关 ORT_MEDIA_BACKEND) / 34 (补丁式复用, 改 embed.c 必须回填 patch) / 37 (多实例并行播放, SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer)
-**关联待办**: 3.1 ffplay 能力增强 (XFrameGrabber/硬解/媒体信息) / ffplay 引擎并发创建竞态 (错开即好, LO 天然满足)
-**已闭环记录**: 2026-08-17 ffplay 多实例并行播放 (经验 37) / 2026-08-19 video_open 尺寸修复 (本章 6.2-6.3)
-**探针**: ffplay_window_size_probe (尺寸链, 本章) / ffplay_engine_probe (引擎推进/pause/seek/双实例) / ffplay_inject_probe (注入 SUCCESS) / media_green_probe (双态帧差异)
-**项目级上下文**: 1.6 媒体后端 (默认 ffplay, gst 回退) / 1.6 GL 全禁用 (SDL_FRAMEBUFFER_ACCELERATION=0) / 1.6 诊断开关 (video_open 打印 renderer 后端)
+**关联经验**: 17/18/19 (gst → ffplay 替代链) / 28/29/30 (ffplay 注入 SDK 模式 + ORT_MEDIA_BACKEND) / 34 (补丁式复用回填纪律) / 37 (多实例并行播放)
+**关联待办**: 3.1 ffplay 能力增强 (XFrameGrabber/硬解/媒体信息) / ffplay 引擎并发创建竞态
+**已闭环**: 2026-08-19 video_open 尺寸修复 (6.1) / 2026-08-19 多实例根治 (6.6) / 2026-08-19 静音专项 (6.7) / 2026-08-20 日志专项 (6.8)
+**探针**: ffplay_window_size_probe / ffplay_engine_probe / ffplay_inject_probe / media_green_probe
+**项目级上下文**: 1.6 媒体后端 / 1.6 GL 全禁用 / 1.6 诊断开关
 
 ### 6.6 多实例根治 (2026-08-19 落地)
 
@@ -1120,40 +1029,11 @@ sal_Bool m = player->isMute();                                  // OK 读回正�
 结论: UNO marshalling 完全支持跨进程调用 XPlayer::setMute/isMute, 往返状态正确。
 "奇巧"处 —— 不需要打 LO 源码补丁, ffplay.so 自己作为 LO 组件就能接收远程消息。
 
-#### 6.7.5 端到端回归 (media_green_probe)
+#### 6.7.5 端到端回归 — 已闭环 (2026-08-19)
 
-video-loop.pptx (LO qa 素材, 带视频) + ORT_MEDIA_BACKEND=ffplay + Xvfb :90:
-```
-[ImpressLink] C ABI SetMute session=0x565237fedb30 mute=1
-[FFPLAY] 组件被加载!                                    ← UNO createInstance 触发子进程加载
-[FFPLAY] FfplayManager 构造! (Manager_FFPlay 注入生效)
-[FFPLAY] setFastPropertyValue(MUTE_ALL=true) via UNO   ← UNO marshalling 跨进程调用
-[FFPLAY] SetMuteAll(true) engines=1                    ← ★ engines=1! g_engines 真表命中
-[ImpressLink] SetMute(true) -> UNO Manager_FFPlay OK
-[SetMute] mute=1 result=1
-[FFPLAY] setFastPropertyValue(MUTE_ALL=false) via UNO
-[FFPLAY] SetMuteAll(false) engines=1                  ← 恢复同样 engines=1
-[SetMute] mute=0 result=1
-```
+PASS: video-loop.pptx + ORT_MEDIA_BACKEND=ffplay, engines=1 SetMuteAll(true/false) 命中 (UNO marshalling 跨进程生效)。详细日志见 git 历史。
 
-#### 6.7.6 退役清单 (方案 A 担留)
-
-| 文件 | 删除内容 |
-|---|---|
-| ffplay_player.cxx | `extern "C" ffplay_set_mute_all` C ABI 导出 |
-| ffplay_player.hxx | 注释中"经 impresslink ABI 触发"改为"经 UNO 触发" |
-| link_utils.h | `MuteAllFfplayEngines` 函数声明 |
-| link_utils.cpp | `MuteAllFfplayEngines` 函数实现 + dlfcn.h 引入 |
-
-#### 6.7.7 新增清单 (C1 简化版)
-
-| 文件 | 新增内容 |
-|---|---|
-| ffplay_manager.cxx | `WeakImplHelper2<XManager, XFastPropertySet>` + `setFastPropertyValue(0, mute)` 转发 `FfplayPlayer::SetMuteAll` + `getFastPropertyValue(0)` |
-| impress_session.cpp | `SetMute` 改用 ctx_ remote createInstance + QI XFastPropertySet + setFastPropertyValue(0, mute) |
-| impress_session.cpp 头 | 包含 `XFastPropertySet.hpp` |
-
-#### 6.7.8 ABI 不变性 (上层透明)
+#### 6.7.6 ABI 不变性 (上层透明)
 
 - impresslink C ABI: `ImpressSessionSetMute(void* session, int mute)` 签名不变
 - LibreOfficeImpressManager::SetMute override 实现不变 (D 层, 已在 libNovaOfficeCore.so)
@@ -1173,12 +1053,6 @@ video-loop.pptx (LO qa 素材, 带视频) + ORT_MEDIA_BACKEND=ffplay + Xvfb :90:
 5. **先探针验证再实施**: 方案 C 的 UNO 远程调用路径先用 ffplay_inject_probe 探针验证
    基础可行性 (createInstance + setMute/isMute 往返), 再做端到端实施, 避免大量返工。
 
-#### 6.7.10 关联索引
-
-**关联经验**: 30 (mediawindow_impl.cxx ORT_MEDIA_BACKEND 注入, 方案 A) / 34 (ffplay_embed
-真播放器接管, 引擎 SDL_CreateWindowFrom) / 37 (多实例根治, audio_dev/render_mutex/per-instance)
-**关联待办**: 1.6 (默认 ffplay, gst 回退) / 3.1 (user 模板部署保障)
-**已闭环记录**: 2026-08-19 Phase 2 静音专项 (方案 A 失败 → C1 简化版落地)
 **关键代码引用**: ffplay_manager.cxx (XFastPropertySet) / impress_session.cpp:437 (SetMute UNO) / ffplay_player.cxx:51 (SetMuteAll 静态方法)
 
 ### 6.8 ffplay 日志专项 (2026-08-20 落地)
@@ -1243,31 +1117,9 @@ av_log_set_level 同步 ORT_LOG_LEVEL (debug→AV_LOG_DEBUG=48, info→AV_LOG_IN
 oosplash → fork soffice.bin (final pid), ffplay.so 在最终 soffice.bin 内执行 getpid()。
 配对方式: `ls -t ~/.office-link/logs/ffplay_*.log | head -1` (按 mtime 排序最新)。
 
-#### 6.8.4 回归验证 (2026-08-20)
+#### 6.8.4 回归验证 — 已闭环 (2026-08-20)
 
-video-loop.pptx + ORT_MEDIA_BACKEND=ffplay + ORT_LOG_LEVEL=debug + Xvfb :90:
-
-```
-office_<main_pid>.log:
-  [info] [OfficeRuntime] soffice child started initial_pid=2878898 ...
-
-ffplay_<soffice_bin_pid>.log (4357 bytes):
-  [info] [FFPLAY] log initialized, pid=2878911, file=ffplay_2878911.log
-  [info] [FFPLAY] component loaded (ffplay.so dlopen by soffice.bin)
-  [info] [FFPLAY] FfplayManager ctor (Manager_FFPlay injection active)
-  [info] [FFPLAY] createPlayer URL=file:///tmp/lyAeLM (ffplay takes over media)
-  [info] [FFmpeg/ffmpeg] [FFPLAY] video_open: window=0x... renderer=0x... backend=software
-  [info] [FFPLAY] setFastPropertyValue(MUTE_ALL=true) via UNO
-  [info] [FFPLAY] SetMuteAll(true) engines=1
-```
-
-**验证项**:
-- ✅ ffplay log 文件落盘 (4357 字节, flush_on 修复 0 字节问题)
-- ✅ 日志全部英文化
-- ✅ ffmpeg av_log 接入 (前缀 [FFmpeg/ffmpeg] [FFPLAY])
-- ✅ engines=1 SetMuteAll 命中 (静音专项不回归)
-- ✅ stderr 已无裸 fprintf (全部走 spdlog)
-- ✅ flush_on 保证实时 tail -f 可监控
+PASS: ffplay log 落盘 (4357 字节, flush_on 修复 0 字节问题) + 日志全英文 + av_log 接入 (前缀 [FFmpeg/ffmpeg] [FFPLAY]) + engines=1 SetMuteAll 命中 (静音不回归) + stderr 已无裸 fprintf + flush_on 保证实时 tail -f。详细日志见 git 历史。
 
 #### 6.8.5 不动清单 (patch 纪律)
 
@@ -1275,9 +1127,5 @@ ffplay_<soffice_bin_pid>.log (4357 bytes):
 - **cmdutils.c / ffplay.c**: 上游 ffplay.c 代码, 经验 34 patch 纪律不动
 - **ffplay_embed.c L1818 fprintf**: 保留 (上游残留)
 
-#### 6.8.6 关联索引
-
-**关联经验**: 34 (改 ffplay_embed.c 回填 patch) / 30 (mediawindow_impl.cxx ORT_MEDIA_BACKEND 注入)
-**关联代码**: ffplay_log.h (新建) / ffplay_manager.cxx (Init 注册) / ffplay_embed.c (av_log 替换) / office_runtime.cpp (flush_on + pid 暴露)
 **已知小问题**: [FFmpeg/ffmpeg] 后偶尔空消息 (ffmpeg 退出路径 av_log(NULL, AV_LOG_QUIET, "") 触发, 不影响功能)
 
