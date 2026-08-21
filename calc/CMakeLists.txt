@@ -10,8 +10,6 @@ endif()
 add_library(CalcLink SHARED
     calclink.cpp
     calc_session.cpp)
-# 统一产物名: Linux 为 calclink.so (LibreOfficeCalcManager dlopen 路径);
-# PREFIX "" 去掉 Linux 的 lib 前缀
 set_target_properties(CalcLink PROPERTIES OUTPUT_NAME calclink PREFIX "")
 # 构建输出目录 = 部署目录 (同 office_runtime, 防 .so 双份致 GetRuntimeDir 错位)
 set_target_properties(CalcLink PROPERTIES
@@ -25,9 +23,8 @@ target_include_directories(CalcLink PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../offi
 target_compile_options(CalcLink PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_include_directories(CalcLink PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include") # spdlog
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
-# Linux: UNO SDK 平台宏 (SAL_UNX/UNX/LINUX/GCC, 与 NovaLibreOfficePlayer 一致)
 if(UNIX AND NOT APPLE)
     target_compile_definitions(CalcLink PRIVATE SAL_UNX UNX LINUX GCC)
     # UNO 库互相引用未定义符号, 需要放宽链接检查

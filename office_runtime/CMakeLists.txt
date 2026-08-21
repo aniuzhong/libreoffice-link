@@ -16,9 +16,8 @@ set_target_properties(OfficeRuntime PROPERTIES
 target_link_libraries(OfficeRuntime PRIVATE LibreOffice::Sdk)
 target_include_directories(OfficeRuntime PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include") # spdlog / UNO IDL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
-# Linux: UNO SDK 平台宏
 target_compile_definitions(OfficeRuntime PRIVATE SAL_UNX UNX LINUX GCC)
 
 # UNO 库互相引用未定义符号, 需要放宽链接检查

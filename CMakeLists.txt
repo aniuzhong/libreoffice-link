@@ -17,7 +17,7 @@ find_package(LibreOfficeSDK REQUIRED)
 find_package(Threads REQUIRED)
 
 # MSVC 变量须在 project() 之后才定义 (编译器检测); 之前判断恒真会把 -fPIC
-# 传给 MSVC (D9002 警告, 2026-08-18 探针回归时发现)
+# 传给 MSVC (D9002 警告)
 if(NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")

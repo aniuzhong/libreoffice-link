@@ -1,17 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
-project(common LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package(LibreOfficeSDK REQUIRED)
-find_package(Threads REQUIRED)
-if(UNIX AND NOT APPLE)
-    find_package(X11 REQUIRED)
-endif()
-
-# 平台公共层: 接口 (link_platform.h) + 跨平台工具 (link_utils/office_paths) +
+# 平台公共层 (STATIC): 接口 (link_platform.h) + 跨平台工具 (link_utils/office_paths) +
 # 平台实现按环境归组 (linux/: Xvfb 共享内核模式; windows/: 独立进程模式 +
 # OfficeLog 实现 win_office_log.cpp, 经验 39)。
 # STATIC 库: 链接进各 link (calclink/impresslink/writerlink); Linux 依赖

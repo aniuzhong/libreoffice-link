@@ -1,16 +1,3 @@
-cmake_minimum_required(VERSION 3.16)
-project(ImpressLink LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake")
-find_package(LibreOfficeSDK REQUIRED)
-find_package(Threads REQUIRED)
-if(UNIX AND NOT APPLE)
-    find_package(X11 REQUIRED)
-endif()
-
 # 部署目录由 SDK 根统一推导 (单一构建树内不用 CACHE 变量, 避免缓存旧值)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     get_filename_component(_LO_SDK_PARENT "${LIBREOFFICE_SDK_ROOT}/.." ABSOLUTE)
@@ -23,8 +10,6 @@ endif()
 add_library(ImpressLink SHARED
     impresslink.cpp
     impress_session.cpp)
-# 统一产物名: Linux 为 impresslink.so (LibreOfficeImpressManager dlopen 路径);
-# PREFIX "" 去掉 Linux 的 lib 前缀
 set_target_properties(ImpressLink PROPERTIES OUTPUT_NAME impresslink PREFIX "")
 # 构建输出目录 = 部署目录 (同 office_runtime, 防 .so 双份致 GetRuntimeDir 错位)
 set_target_properties(ImpressLink PROPERTIES
@@ -38,9 +23,8 @@ target_include_directories(ImpressLink PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../o
 target_compile_options(ImpressLink PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_include_directories(ImpressLink PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include") # UNO API 头
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
-# Linux: UNO SDK 平台宏 (SAL_UNX/UNX/LINUX/GCC, 与 calclink 一致)
 if(UNIX AND NOT APPLE)
     target_compile_definitions(ImpressLink PRIVATE SAL_UNX UNX LINUX GCC)
     # UNO 库互相引用未定义符号, 需要放宽链接检查

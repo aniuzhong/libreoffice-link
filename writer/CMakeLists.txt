@@ -26,11 +26,11 @@ set_target_properties(WriterLink PROPERTIES
 target_include_directories(WriterLink PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/../office_runtime"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include") # spdlog / UNO IDL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 # UNO 头 + CPPU_ENV 宏 (Windows 侧同样需要)
 target_link_libraries(WriterLink PRIVATE LibreOffice::Sdk)
 
-# Windows: common 共享工具 (OfficeLog/GetLinkDir/BootstrapSession, 2026-08-17;
+# Windows: common 共享工具 (OfficeLog/GetLinkDir/BootstrapSession;
 # 平台层不实例化, 见文件头注释)
 if(WIN32)
     target_link_libraries(WriterLink PRIVATE common)
