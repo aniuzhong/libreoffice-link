@@ -6,21 +6,7 @@
 
 ---
 
-## Part 1: 平台隔离设计验证 — 已闭环 (2026-08-18)
-
-> 历史验证段已归档; 关键沉淀已分别落入 **经验 43** (BootLock 死锁根因)、**Part 2** (设计规格)、HANDOFF.md 1.6 (当前状态)、**已闭环事项** (commit 5832a507 Windows 回归)。
-
-**目的达成评估** (2026-08-19 Windows 回归 + demo 通过后核验):
-- ✅ 会话层零 `#ifdef` (逻辑分支): calc/impress/writer 剩余 `#ifdef` 均为编译机制类 (windows.h/FindWindow 宏 include, Part 2 E 表"可留")
-- ✅ 平台差异安放: Windows 回归 4 个问题无一在会话层平台分支
-- ✅ 变体点可枚举: SessionPlan 一眼看清两平台差异 (discover/form/fullscreen/settle_ms/ui_hide_needed/terminate_on_destroy)
-- ✅ 构造性保证 (构建期): Windows 编译零错误
-- ✅ 行为期保证: Windows conformance 探针五段全绿 (CALC/WRITER/IMPRESS/CORE-WORD/CORE-PPT, rc=0) + NovaPlayerDemo 全量回归
-- ⚠️ 诚实边界: 无 Windows CI; FramePump 待 Windows 侧回归确认; 模板部署保障 (CopyFile.bat) 待打包流程加项 (HANDOFF.md 3.1)
-
----
-
-## Part 2: 平台隔离设计(意图/机制分离)— 已实施 2026-08-18 (J1-J4 全量)
+## 平台隔离设计(意图/机制分离)— 已实施 2026-08-18 (J1-J4 全量)
 
 > 背景: 双平台并行开发负担重。UNO 层大体一致(实证: writerlink 零平台层双平台可用),
 > 桌面/窗口层本质分歧(共享内核+Xvfb+slot vs 独立进程+独立桌面)。**分歧不可消除,
@@ -176,15 +162,6 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
   review, 响亮可见;无 Windows CI 前, "保证"上限 = 构造性防护 + 纪律。
   C ABI 与 UNO 语义是共同资产, 动它们仍需对端编译确认。
 
-### J. 迁移路径(每步可独立验证, 任意步后可停)
-
-1. **impress 先行**(收益最大: Windows 实现还是 stub, 先定缝后落地, 零返工):
-   LinkPlatform +SessionPlan/BeginBoot/DiscoverWindow/FormWindow/OnSessionEnd,
-   impress 会话清 `#ifdef`, Linux 全链探针回归。
-2. Windows impress 平台按新接口落地(契约即规格书), conformance 探针补齐。
-3. calc 跟进(含 F 反序用例), 回归 impress_multi/media_green。
-4. writer 可选: to_path 上收 link_utils(独立小步, 随时可做);G 缝按 G1/G2 决策。
-
 ### K. 反模式清单(明确不做)
 
 - 统一 X11/Win32 "窗口 API"(伪泛型, 最小公约数毁 workaround)
@@ -263,40 +240,12 @@ platform_->HideUiExtras(frame_, factory, ctx_);  // 平台自决
 - **Windows**: 行为不变 (InputLineVisible dispatch 逻辑原样搬迁, 仅日志前缀改) — 待 Windows 侧回归确认
 - **隔离保证**: Linux 改 HideUiExtras 实现 (空) 不影响 Windows; Windows 改 HideUiExtras 实现不影响 Linux
 
-#### UI 隐藏机制实证 (2026-08-19 debug 日志, 置信度: 高)
+#### UI 隐藏机制实证结论
 
-`ORT_LOG_LEVEL=debug` 跑 calc (2 xlsx) + impress (2 pptx) 验证 HideUiBlock 内部行为:
-
-**[置信度: 高, debug 日志实证]** LO 在 Xvfb 窗口化模式下 UI 元素默认 vis=0 (不显示):
-- calc/impress 的 state[before] 全部 vis=0, state[after] 全部 vis=0
-- menubar/toolbar_std/toolbar_fmt/toolbar_draw/statusbar/sidebar/sidebar_props 均如此
-- HideUiBlock 的 hideElement 是对已隐藏元素的冗余兜底 (非主要机制)
-
-**[置信度: 高, debug 日志实证]** HideUiBlock 内 `.uno:FullScreen` dispatch 在 calc/Linux
-和 impress/Linux 下均 `dispatcher NOT found`, 从未生效。此前"FullScreen 全屏态自管隐藏 UI"
-的认知错误。FullScreen dispatch 在 Xvfb 无头环境下是死代码 (desktop_ provider 找不到此 dispatch)。
-
-**[置信度: 高, 探针实证]** HideUiBlock 内 setMenuBar(null) 非冗余——消除 impress 1px 底边框:
-- 6 次探针实验 (ui_1px_probe + 像素分析) 闭合验证:
-  - V1 (无 HideUiBlock): impress row[-1] = (0,0,0) 纯黑, 1px 边框出现
-  - 步骤1 (完整 HideUiBlock): 1px 消失
-  - 复现 (无 HideUiBlock): 1px 再次出现
-  - V2 (无 HideUiBlock + 2500ms 独立 sleep): 1px 仍出现 → sleep 时序无关
-  - V3a (只 setMenuBar, 无 hideElement): 1px 消失 → setMenuBar 是消除 1px 的子动作
-- 机制: setMenuBar(null) 移除 LO 窗口的 menubar 容器, 触发窗口重绘/布局调整,
-  消除初始化过渡期的 1px 底边框
-- hideElement 和 sleep 对 1px 无效 (V2 + V3a 间接证明)
-
-**[置信度: 高, debug 日志实证]** 多文档并发无竞态:
-- 2 calc + 2 impress 交错执行 HideUiBlock, 各 frame 的 setMenuBar(null)/hideElement 互不影响
-- frame 隔离: 各会话 container pos/size 不同 (不同 slot), setMenuBar 对各自 frame 操作
-- frame_active 状态可能不同 (后创建的 frame 被激活), 但 UI 元素 vis 一致 (全 0)
-
-**[置信度: 中, 推断]** LO Xvfb 无头环境 UI 默认 vis=0 的原因:
-- 推测 LO 在无头/无桌面环境下不构建 UI 元素 (VCL 后端不渲染)
-- HideUiBlock 的 hideElement 是为有头环境 (Windows 独立桌面) 准备的防御性代码
-- setMenuBar 消除 1px 的间接效果可能在 Windows 下也有效 (待 Windows 侧验证)
-- 此推断无法在 Linux 侧验证 (Linux 只用 Xvfb), 需 Windows 侧 debug 日志确认
+- **LO Xvfb 无头环境 UI 默认 vis=0**: hideElement 是对已隐藏元素的冗余兜底
+- **`.uno:FullScreen` dispatch 在 Xvfb 下从未生效**: desktop_ provider 找不到此 dispatch
+- **setMenuBar(null) 消除 impress 1px 底边框**: 移除 menubar 容器触发窗口重绘, 消除初始化过渡期边框; hideElement 和 sleep 对 1px 无效
+- **多文档并发无竞态**: 各会话 frame 隔离, setMenuBar/hideElement 互不影响
 
 ### 3.2 待评估子项
 

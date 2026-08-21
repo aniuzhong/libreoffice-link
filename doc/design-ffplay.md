@@ -55,8 +55,6 @@ SDL_RenderPresent(renderer); // 线程 A: 用的是 B 的渲染器 → 崩溃!
 ```
 **关键纠偏**: 原独立 .md 探针虚构把 crash 归因"音频设备共享", 实证发现音频路径无 crash (SDL2 支持多设备内部混音), crash 实际在渲染竞态。修复方向随之调整: 不动音频全局状态 (改用 per-instance audio_dev), 引入 render_mutex 串行 video_display 全局访问面。
 
-**与 ijkplayer 对照** (file:///home/hido/仓库/ijkplayer): ijkplayer 用 `FFPlayer` 结构体 + per-instance `SDL_Aout`/`SDL_Vout` 彻底消灭全局 (工业级根治佐证); Nova 取其"方向" (全局进实例结构体), 保持 patch 模式 (Nova 改动面窄, ijksdl shim + fork 分家对 Nova 过重)。
-
 **audio_volume 原子化**: 移出本根治 (int 对齐读写 x86 实践原子, 属单实例线程安全细节, 非多实例正确性)。若 Phase 2 静音链路引入高频 setMute 调用再评估。
 
 **关联经验**: 34 (改 embed.c 必须回填 patch, 已回填 401 行) / 37 (多实例并行播放, SDL 修复; 本根治补软件渲染下残留全局竞态) / 19b (Xvfb 恒无 GPU, 软件渲染串行无并发损失)
@@ -70,15 +68,7 @@ SDL_RenderPresent(renderer); // 线程 A: 用的是 B 的渲染器 → 崩溃!
 
 ### 3.1 方案演进
 
-**方案 A (dlopen 跨组件, 已退役)**: impresslink.so (主进程) `link_utils::MuteAllFfplayEngines`
-通过 dlopen("ffplay.so") + dlsym("ffplay_set_mute_all") 触发。**失败根因**:
-office_runtime.cpp BootstrapOffice 用 osl_executeProcess 启动独立 soffice.bin 子进程,
-主进程 dlopen ffplay.so 拿到的是主进程副本的空 g_engines 表, **engines 永远=0**,
-跨进程不可见。回归日志 (Phase 1 验证):
-```
-[FFPLAY] SetMuteAll(true) engines=0    ← 期望 ≥1, 实际 0
-[ImpressLink] SetMute(true) -> ffplay OK  ← 链路通但无效
-```
+**方案 A (dlopen 跨组件, 已退役)**: 因跨进程不可见 (主进程 dlopen 拿到空 g_engines 表) 失败。
 
 **方案 C1 简化版 (UNO 远程调用, 已落地)**: 利用 ffplay.so 本身是注册到 ffplay.rdb 的
 标准 LO 组件 (Manager_FFPlay, 子进程内被 dlopen), UNO ServiceManager 知道它的存在。
@@ -126,69 +116,15 @@ UnregisterEngine/SetMuteAll 设计。仅触发方式从 dlopen C ABI 换成 UNO 
 getFastPropertyValue 两个虚函数, 不需要实现 XPropertySet 的 7 个方法 (易踩坑,
 原首版误继承导致编译错误)。
 
-### 3.4 探针可行性验证 (ffplay_inject_probe 扩展)
-
-**早期 6 层探针路径** (源自 ppt-mute.md 整合, 2026-08-19; Phase 2 落地前的诊断 SOP):
-
-| 层 | 探针/方法 | 结论 |
-|---|---|---|
-| 1. ffplay 引擎层 | ffplay_mute_probe (engine 组) — set_volume/get_volume 直调 | ✅ 引擎层 set_volume(0) 设 audio_volume=0,SDL 混音器输出静音;静音后 media_time 仍推进,解码正常 |
-| 2. FfplayPlayer 映射 | 代码审查 ffplay_player.cxx setMute/setVolumeDB/isMute | ✅ setMute/setVolumeDB 映射正确;❌ isMute 硬编码 false (Phase 2 已修) |
-| 3. LO UNO XPlayer 接口 | ffplay_mute_uno_probe (office 组) — createPlayer+setMute/isMute | ⚠️ createPlayer 后 duration=0, start() 后 mediaTime=0 — 因 createPlayerWindow 未被调 (引擎在 createPlayerWindow 创建, parent=0 时不创建); LO 真实流程会调,正常播放时引擎存在 |
-| 4. LibreOfficeImpressManager | 代码审查 LibreOfficeImpressManager.cpp | ❌ 未 override SetMute/GetMuteStatus,走基类 return false (Phase 2 已修) |
-| 5. impresslink C ABI | ffplay_mute_abi_probe (dlopen 组) — nm + dlsym | ❌ ImpressSessionSetMute 缺失 (Phase 2 已加) |
-| 6. 完整链路验证 | Phase 2 落地后 media_green_probe 端到端 | ✅ engines=1 SetMuteAll 命中 (见 3.5) |
-
-**6 层探针 SOP 价值**: 不需要每次都从 UI 起跑,可逐层定位问题(引擎层/映射/UNO/ABI/管理器),加快回归。Phase 2 后已知问题 1-5 全部修复。
-
-**Phase 2 UNO 跨进程基础路径验证** (ffplay_inject_probe 扩展, 2026-08-19):
-在跑端到端回归前, 先用 ffplay_inject_probe 验证 UNO 跨进程远程调用基础路径:
-```cpp
-// 通过 remote ctx createInstance + createPlayer + 调 setMute/isMute 远程往返
-auto mgr = sm->createInstanceWithContext("Manager_FFPlay", ctx);  // OK 子进程加载
-auto player = mgr->createPlayer(url);                            // OK 跨进程创建
-player->setMute(true);                                           // OK 跨进程生效
-sal_Bool m = player->isMute();                                  // OK 读回正确
-```
-日志验证 (file:///...test_media/media1.mp4 + ORT_MEDIA_BACKEND=ffplay):
-```
-[FFPLAY] 组件被加载!                              ← createInstance 触发子进程加载
-[FFPLAY] FfplayManager 构造! (Manager_FFPlay 注入生效)
-[INJECT] Manager_FFPlay created OK
-[FFPLAY] createPlayer 被调用! URL=... (ffplay 接管媒体!)
-[UNO-REMOTE] initial isMute=0
-[UNO-REMOTE] after setMute(true) isMute=1  OK 跨进程生效
-[UNO-REMOTE] after setMute(false) isMute=0  OK 恢复
-[UNO-REMOTE] second createInstance: mgr2=OK  (新实例, 非 singleton — C1 需伪单例改造)
-```
-结论: UNO marshalling 完全支持跨进程调用 XPlayer::setMute/isMute, 往返状态正确。
-"奇巧"处 —— 不需要打 LO 源码补丁, ffplay.so 自己作为 LO 组件就能接收远程消息。
-
-### 3.5 端到端回归 — 已闭环 (2026-08-19)
+### 3.4 端到端回归 — 已闭环
 
 PASS: video-loop.pptx + ORT_MEDIA_BACKEND=ffplay, engines=1 SetMuteAll(true/false) 命中 (UNO marshalling 跨进程生效)。详细日志见 git 历史。
 
-### 3.6 ABI 不变性 (上层透明)
+### 3.5 ABI 不变性 (上层透明)
 
 - impresslink C ABI: `ImpressSessionSetMute(void* session, int mute)` 签名不变
 - LibreOfficeImpressManager::SetMute override 实现不变 (D 层, 已在 libNovaOfficeCore.so)
 - libNovaOfficeCore.so 不需要重新构建 (D 层调用方式未变, 只是内部 ImpressSessionSetMute 实现改了)
-
-### 3.7 教训
-
-1. **跨进程通信前先确认进程架构**: 方案 A 假设 ffplay.so 与 impresslink.so 同进程,
-   未考虑 office_runtime 的子进程架构 (BootstrapOffice 用 osl_executeProcess 启动
-   独立 soffice.bin)。dlopen 拿到的是主进程副本, g_engines 跨进程不可见。
-2. **UNO 是 LO 原生 RPC 机制**: 跨进程调用 LO 子进程内组件应优先用 UNO pipe +
-   urp marshalling, 不应自建 dlopen/dlsym 链路。LO 组件天然能接收 UNO 远程消息。
-3. **Manager 非 singleton 不一定是问题**: 即使每次 createInstance 都 new 新实例,
-   只要触发的方法操作的是模块级静态表 (而非实例成员), 新实例同样可访问全部状态。
-4. **XFastPropertySet 不继承 XPropertySet**: 实现时只需 setFastPropertyValue +
-   getFastPropertyValue, 不要误实现 XPropertySet 的 7 个方法。
-5. **先探针验证再实施**: 方案 C 的 UNO 远程调用路径先用 ffplay_inject_probe 探针验证
-   基础可行性 (createInstance + setMute/isMute 往返), 再做端到端实施, 避免大量返工。
-
-**关键代码引用**: ffplay_manager.cxx (XFastPropertySet) / impress_session.cpp:437 (SetMute UNO) / ffplay_player.cxx:51 (SetMuteAll 静态方法)
 
 ## 4. ffplay 日志专项 (2026-08-20 落地)
 

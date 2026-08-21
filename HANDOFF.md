@@ -344,66 +344,19 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ---
 
-## 七、已知漏洞 [1 待修/5 已修] (updated 2026-08-20)
+## 七、已知漏洞 [1 待修/5 已修] (updated 2026-08-21)
 
 > 攻击性测试发现的漏洞。已修复的标注"已修复"并保留在此供查阅。
 > 复现探针: `tools/CMakeLists.txt` 链接组 `add_multi_tools` (attack_uaf/attack_resize/attack_pagenav/attack_mute_teardown/attack_lock_inversion/attack_cb_join_self)。
 
-### V1: Destroy 与帧泵竞态 (竞态崩溃) — 已关闭 (2026-08-20 实证, 症状消除)
-
-- **严重度**: ★★ (竞态依赖时序, 组合运行确凿崩溃)
-- **现象**: 8 线程并发 `Create→Start→sleep(3~8ms)→Destroy` 时, `EXIT=134` (SIGABRT), 报错 `IllegalArgumentException` + 核心转储
-- **根因分析**: `Destroy()` 在 `mu_` 之外 `reset platform_` / `pump_`, 而 `FramePump::PollThread` 持 `frame_mutex_` 运行 `frame_fn_` (即 `CaptureFrame`, 触及 `platform_`)。两把锁 (`mu_` vs `frame_mutex_`) 不重合, 存在窗口期。但 `FramePump::Stop()` 是同步 join 的, 根因可能更深 — 共享内核模式下多 session UNO 对象生命周期交错 (非简单锁问题)
-- **2026-08-20 实证 (attack_uaf_probe UAF-1, ORT_HOME=/tmp/ort_uaf)**: 8 线程 3 秒竞态 `EXIT=0` 无崩溃, frames=8 (会话真实创建并推帧)。症状消除归因于三层修复组合: ① AbiCall 异常边界吞 UNO 异常 (原 SIGABRT 直接死因 = 异常逃逸 C ABI, 非 UAF 本身); ② 三会话销毁序列已同构 Stop-first (`destroyed_` 幂等 → `pump_->Stop()` join → UNO clear → `platform_.reset()`, 见 calc_session.cpp Destroy); ③ PushFrame 双检查 (`destroyed_`/`platform_`) + ABI Guard 持锁与 Destroy 互斥
-- **残留**: 竞态窗口内 Create 仍可能抛 UNO 异常 → 安全转为 Create 失败返回 null (非崩溃); 共享内核深层 UNO 生命周期交错未根治, 观察保留
-- **关联经验**: 42 (FramePump 契约, P3 锁纪律 `frame_mutex_→mu_`) / 43 (BootLock 同源串行化弱点)
-- **状态**: 已关闭 (症状消除, 残留非崩溃)
-
-### V2: 高频 resize 风暴卡死 (确定性卡死) — 已修复 (2026-08-20)
-
-- **严重度**: ★ (压力测试场景, 非正常使用)
-- **现象**: 5000 次无停顿 `ImpressSessionSetResolution` 调用 → `EXIT=124` (超时)
-- **根因**: `SetWindowSize` 内固定 `sleep(200ms)` 无实证依据 (注释仅 "re-layout"), 5000 × 200ms = 1000s 累加超时。非 XShm 段重建瓶颈 (ShmState::Ensure 有尺寸缓存, 仅尺寸变化时重建)
-- **修复 (2026-08-20)**: ① `SetWindowSize` 去掉 sleep — XSync 保证窗口尺寸生效, LO 重排版由帧泵下一轮 CaptureFrame 自然消化; ② 落位 sleep(500ms) 同理去掉 (仅 ORT_DUMP_WINDOWS 诊断模式保留 50ms); ③ calc/impress `SetResolution` 加 50ms 节流 (高频风暴合并)
-- **实证**: attack_resize_probe RES-3 (5000 次高频 resize) `EXIT=0` SCORE 0/3, 不再超时
-
-### V3: 快速 teardown-recreate 卡死 (确定性卡死)
-
-- **严重度**: ★ (压力测试场景, 非正常使用)
-- **现象**: 200 轮 `Create→Start→Destroy` (即 `delete this`) 后立即再次 `Create` → `EXIT=124` (超时)
-- **根因**: 堆分配器极可能复用同一地址, `Destroy` 触发的 `BootLock`/profile seed 在快速 teardown-recreate 节奏下发生级联阻塞。根因部分与经验 43 (BootLock) 同源, 需进一步证实
-- **修复方向**: Destroy 内确保 BootLock/profile seed 完全释放后再返回; 或限制 Create 频率
-
-### V4: 销毁后调用其他 API 仍崩溃 (经验 45 修复缺口) — 已关闭 (2026-08-20 实证)
-
-- **严重度**: ★★★ (确定性必现, 经验 45 修复未覆盖)
-- **现象**: `Create→Start→Destroy` 后继续调用 `CalcSessionStart(s)` / `NextPage(s)` / `SetResolution(s)` → `EXIT=134`, 报错 `Assertion '_pInterface != NULL' failed` (XViewPane 等已 clear 的 Reference 解引用)
-- **根因**: 经验 45 的 `g_live_sessions` 集合仅防护 `Destroy` 本身 (重复 delete), 但其他 C ABI 函数 (`Start/Stop/NextPage/SetResolution/...`) 只检查 `session &&` (非空指针), 不检查"是否已销毁"。`Destroy()` 内部已 `pane_.clear()` / `view_.clear()` / `component_.clear()`, 销毁后调用 `NextPage` → `ScrollPage` → `pane_->getVisibleRange()` 解引用空 Reference → assertion。impress 侧同理 (`slideshow_` / `frame_` 已 clear)
-- **修复 (2026-08-20, 双层防护)**:
-  - **ABI 层** `common/session_registry.h`: `SessionRegistry` (每 link 一个实例, recursive_mutex + live 集合)。`Create` 成功后 `Register`; `Destroy` 经 `TryRevoke` 注销 (在册才 delete, 空/已销毁 no-op — 承接经验 45); 其余所有 ABI 入口经 `Guard` (构造持锁 + 校验在册, 存活期间 TryRevoke+delete 阻塞等待) — 销毁后调用任意 API 一律 no-op
-  - **ABI 层第二要素** `AbiCall(tag, fallback, fn)`: 所有导出函数体包裹, C++ 异常不得逃逸 C ABI (逃逸 → std::terminate → SIGABRT)。UNO 异常不继承 std::exception (见 1.4 冷知识), 双 catch 链恰好完整兜底
-  - **Session 层**: `destroyed_` 原子标志 (calc/impress/writer 同构), 所有公开方法首行守卫, `Destroy()` 幂等入口
-- **实证 (2026-08-20, attack_uaf_probe 全绿)**: UAF-1 (8 线程 Destroy 竞态) `EXIT=0` frames=8; UAF-2 (NULL/双重 Destroy/悬垂 API 全套) `EXIT=0` — 双重 Destroy no-op, 悬垂 Start/NextPage/UpdateFrame/SetResolution 全被 Guard 拦截; UAF-3 (同地址堆重用 ×200) 前段零崩溃。原崩溃场景 (竞态下 UNO 异常逃逸 → SIGABRT) 转为 error 日志 + Create 失败返回
-- **部署注意**: 修改涉及 calc/impress/writer 三 link ABI 层 + session 层, 2026-08-20 13:26 构建部署
-- **状态**: 已关闭 (attack_uaf_probe 全绿实证)
-
-### V5: 锁序反转死锁 (mu_ → frame_mutex_, 确定性卡死) — 已关闭 (2026-08-20, API 约束)
-
-- **严重度**: ★★★ (确定性必现, 但需刻意构造: 持锁嵌套调用 + 回调里调 API)
-- **现象**: 线程A 持 `mu_` 调 `NextPage` 后调 `UpdateFrame`(持 `frame_mutex_`), 线程B(帧泵)持 `frame_mutex_` 调 `PushFrame` → `cb_` → 调 `Stop`(持 `mu_`) → 双向等待 → `EXIT=124` 永久死锁
-- **根因**: 锁序 `frame_mutex_ → mu_` 是允许的 (FramePump 契约, 经验 42 P4), 但 `mu_ → frame_mutex_` 是禁止的。调用方在持 `mu_` 期间调 `UpdateFrame`, 或帧回调 `cb_` 内调 session API, 均构成锁序反转
-- **判定**: 非产品漏洞 — 正常使用 (C ABI 函数独立调用, 回调只处理帧数据) 不会触发。需对抗性探针刻意构造
-- **修复 (2026-08-20, API 契约)**: calc/impress/writer session 头文件 `UpdateFrame` 声明处加锁序约束注释, 明确: ① 不得在其他方法调用栈内嵌套调用 UpdateFrame; ② 帧回调 cb_ 内不得调用任何 session API
-- **关联经验**: 42 (FramePump 契约, P4 锁纪律 `frame_mutex_→mu_`, 严禁反向)
-
-### V6: 回调中 Destroy 导致泵线程 join 自己 (确定性卡死) — 已修复 (2026-08-20)
-
-- **严重度**: ★★★ (确定性必现, 回调中调 Destroy 即触发)
-- **现象**: `PushFrame` 在 `frame_mutex_` 内调 `cb_`, `cb_` 里调 `ImpressSessionDestroy` → `Destroy()` → `pump_->Stop()` → `poll_thread_.join()`。当前线程就是泵线程 → `join` 自己 → 永久死锁 (EXIT=124)
-- **根因**: `Destroy` 的 `pump_->Stop()` 无条件 `join` 泵线程, 未判断当前线程是否为泵线程自身。C++ `std::thread::join()` 在调用线程与 `*this` 线程相同时的行为是未定义 (通常死锁或崩溃)
-- **修复 (2026-08-20)**: `FramePump::Stop()` 加 `std::this_thread::get_id() != poll_thread_.get_id()` 检测, 若是泵线程自身则跳过 join (设 stop_requested 后直接返回, 泵线程自己退出循环)
-- **实证**: attack_cb_join_self `EXIT=0`, 不再死锁
-- **关联经验**: 42 (FramePump 契约, Stop 语义)
+| 编号 | 状态 | 一句话 |
+|------|------|--------|
+| V1 | ✅ 已关闭 | Destroy 与帧泵竞态 (AbiCall+destroyed_+Guard 三层修复) |
+| V2 | ✅ 已修复 | 高频 resize 风暴 (去 sleep+节流) |
+| V3 | ❌ **待修** | 快速 teardown-recreate 卡死 |
+| V4 | ✅ 已关闭 | 销毁后 API 调用崩溃 (SessionRegistry::Guard 全入口守卫) |
+| V5 | ✅ 已关闭 | 锁序反转 (API 契约约束) |
+| V6 | ✅ 已修复 | 回调中 Destroy 导致泵线程 join 自己 (线程 ID 检测) |
 
 ---
 
@@ -437,45 +390,3 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 
 
-## 已关闭事项
-
-**2026-08-20:**
-- **文档重构**: HANDOFF.md 分层拆分 (Core + doc/ 伴随文件 experiences/design-platform-isolation/design-framepump/design-ffplay), 新增 0.快速导航 + 1.4 沙箱运行策略集中节 (TRAE sandbox 约束/跑前清场/清场纪律/并行会话协作, 原散落 5 处)
-- 攻击性测试探针 + attack-report (见 1.7)
-- **V1/V4 已关闭**: Destroy 与帧泵竞态 (AbiCall + destroyed_ + Guard 三层修复) + 销毁后 API 调用崩溃 (SessionRegistry::Guard 全入口守卫)。attack_uaf_probe 全绿实证
-- **V2 已修复**: SetWindowSize 去掉无依据 sleep(200ms), 帧泵自然消化布局延迟; SetResolution 加 50ms 节流。attack_resize_probe RES-3 全绿
-- **V5 已关闭**: 锁序反转 (非产品漏洞, API 契约注释约束)
-- **V6 已修复**: FramePump::Stop 加线程 ID 检测防 join self。attack_cb_join_self 全绿
-- **SessionRegistry 重构**: 新增 WithGuard 回调式守卫, 三 link (calc/impress/writer) 统一消除重复 Guard 模式
-- **经验 46**: 相对路径→loadComponentFromURL 失败 (探针必须传绝对路径)
-- **folly 评估**: 评估 folly 异常/并发设施 (exception_wrapper/result/Synchronized/makeTryWith), 结论不引入 (替换量太小, C ABI 不兼容, recursive_mutex 硬约束), 选择性借鉴 (ASCII 状态图/回调式守卫/穷尽性 switch)
-
-**2026-08-19:**
-- **UI 隐藏专项**(4.2): InputLineVisible dispatch 下沉至 HideUiExtras (平台隔离); 6 次探针实验闭合验证 setMenuBar 消除 impress 1px 底边框; HANDOFF.md 认知错位修正 (FullScreen 从未生效等)
-- **FramePoller 阶段0**(经验 42): calc Start 补持锁+重置 paused_ (修 P1/P5); calc UpdateFrame 改锁内直推 (修 P6); impress UpdateFrame 加 mu_ 防并发 (临时防 P3); 单测 50/50 全绿
-- **FramePoller 阶段1**(经验 42): FramePump 组件 + 单测落地 (common/frame_pump.h/.cpp + frame_pump_test.cpp); 单测 14/14 全绿
-- **FramePoller 阶段2**(经验 42): impress 接入 FramePump (tick=40/heartbeat=0/backoff=200, 等价原 PollThread); 清理遗留 StartPoller/StopPoller/PollThread + NextPage 日志残留; impress 补齐 HideUiExtras 调用 (平台隔离两层契约, 之前漏调); demo 回归: pptx 放映帧正常 + 1px 依旧消失
-- **FramePump Start 契约回归修复**(经验 41/42 P1): impress demo "暂停→恢复无法翻页"复现经验 41 路径(resume 走 Start)。根因: FramePump::Start() 幂等早返未重置 paused_, 违反契约"Start=任何状态→Running 未暂停"(见经验 42 详述契约表)。修复: Start() 持 ctrl_mutex_ 内无条件 `paused_=false` 再判幂等; 新增测试 9 (start_resets_paused_when_running) 闭环; 单测 15/15 全绿
-- **FramePoller 阶段3**(经验 42): writer 接入 FramePump。ChangeFn=force_frame_.exchange(脏位 probe), FrameFn=PushFrame 持 mu_ 访问 page_cache_ (frame_mutex_→mu_ 锁序, 无反向); tick=5/heartbeat=100/hbp=false (Pause 冻结, 与原 PollThread `!paused_&&heartbeat_due` 一致)/backoff=200。删除 PollThread/StartPoller/StopPoller。38⑦ 语义(停止后取帧黑屏)由泵全状态 UpdateFrame 承接
-- **FramePoller 阶段4**(经验 42): calc 接入 FramePump。ChangeFn=CheckViewportChanged(持 mu_, 视口签名 row/col/sheet + force_frame_ 脏位, 原 PollThread 内联逻辑提取为方法); tick=20(放宽原 5ms full-speed, 性能预算 50 唤醒/s)/heartbeat=100/hbp=true(Pause 照推, 与原 PollThread 心跳无 paused_ 门控一致)/backoff=200。Create 末尾加首帧 UpdateFrame。P1(Start 不重置 paused_)/P5(双 Start 竞态)/P6(停止后取帧黑屏) 均由 FramePump 契约承接。zoom 维度仍缺(靠心跳兜底, 待 A/B)
-- **三链 FramePump 接入收官**(经验 42 阶段2-4): impress/writer/calc 均已接入统一帧泵, 删除所有 per-session poll_thread_/paused_/force_frame_ 重复实现; 全量构建通过, 单测 15/15 全绿
-
-**2026-08-18:**
-- 诊断日志清理(日志体系统一: 前缀/级别/单入口)
-- 代码重构(link_utils 工具整合/DEFER/UNO_GUARD/异常日志补全/SYS_gettid 可移植)
-- **Impress 暂停→恢复翻页失效**(经验 41, 实测修复)
-- **FramePoller 共性分析**(经验 42, 当日待实施; 2026-08-19 阶段0-4 全部落地)
-- **UI 隐藏收官**(经验 40⑦-⑨): sidebar/statusbar 模板条目补齐(66→69)+ 部署副本同步(踩部署陈旧坑), demo 肉眼验收全部隐藏; 重构检视+全量重建+单测 50/50+探针回归全绿
-- **平台隔离骨架落地(impress)+ BootLock 死锁修复**(3.0/3.3/经验 43): 会话层 `#ifdef` 清零, P0-P10 协议化, 探针复绿
-- **平台隔离设计全量实施**(3.3 J1-J4): J2 Windows impress 新接口落地(Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd, calc/impress 策略按 profile_subdir 数据化); J3 calc_session 重构(P0-P10 协议化, 8 处 `#ifdef` → plan 数据驱动, F 反序定型用例, terminate 按 plan_.terminate_on_destroy 门控); J4 writer G 缝(link_utils::KernelHost 引导缝封装 + to_path 上收, writer 会话引导缝 `#ifdef` 清零); **Linux demo 回归通过**(修复 xvfb_platform Plan() 写死 impress 策略 bug: calc form=AfterReveal/impress form=AfterStart, 2 xlsx 黑屏消失); 日志前缀标准化([Common]→[Common.Boot], [CAPTURE]→[Common.WinWindow]); **Windows 侧回归完成 (2026-08-19, 见 1.7)**
-
-**2026-08-17:**
-- LO 改动同步远端(commit 83e0b9c3e)
-- ffplay 多实例并行播放(经验 37)
-- office_runtime 防御增强与单测加固(经验 35)
-- **废弃 source/ 旧方案**(零实例化实证后全平台清理, 1.7)
-- writer UpdateFrame 语义修复(经验 38⑦)
-- **writerlink 底层链路闭环**(经验 38)
-
-**2026-08-14:**
-- gstreamer 路径清理

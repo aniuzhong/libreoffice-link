@@ -7,18 +7,6 @@
 
 ---
 
-## 经验 41 详述：Impress 暂停→恢复翻页失效
-
-**Impress 暂停→恢复翻页失效 (2026-08-18 Demo 实测修复; 2026-08-19 FramePump 接入后同构复现)**
-
-**原发 (2026-08-18, per-session poller 时代)**: 上层 pause/resume 链路不对称——pause 走 `Pause()`(设 `paused_=true`, poller 不停), resume 走 `Start()`(非 `Resume()`)。`Start()` 内 `paused_=false` 原写在 `StartPoller()` 里, 但 `StartPoller()` 对 `poll_running_==true` 做 early-return(pause 不停 poller, 所以恢复时必命中)→ `paused_` 永远不被重置→ poller 跳过抓帧。修复: `Start()` 中显式 `paused_=false`。
-
-**同构复现 (2026-08-19, FramePump 接入后)**: impress 接入 FramePump 后, `Start()` 委托 `pump_->Start()`。FramePump::Start() 幂等早返路径同样未重置 `paused_` (成员上移到泵内), 导致暂停→恢复(走 Start)画面冻结。根因同构: 状态重置依赖幂等早返路径, 但早返跳过了重置。
-
-**根治**: FramePump::Start() 持 `ctrl_mutex_` 内**无条件** `paused_=false` 再判幂等 (frame_pump.cpp)。契约写入: "Start=任何状态→Running 未暂停" (见经验 42 契约表)。新增测试 9 (start_resets_paused_when_running) 闭环。
-
-**教训**: 暂停/恢复走不同入口时, 状态重置必须放在入口函数本身, 不能委托给可能被 early-return 的下游; 幂等路径也必须执行状态重置。
-
 ---
 
 ## 经验 42 详述：FramePoller 共性分析与治理
@@ -52,10 +40,6 @@
 | P7 | 性能三连: calc/writer 5ms 全速循环=200 唤醒/s; calc 每 5ms 一次 UNO 视口查询=200 IPC/s; impress 静止 25fps 全量重推≈208MB/s | tick 合并 (calc 200→50 唤醒/IPC); dedupe 待阶段5 |
 | P8 | impress width_/height_ 无同步写读 (泵线程写, GetWidth 读, 形式 UB) | — (迁移期未单独处理, FramePump 路径下宽高写主要在 Create/Start 阶段) |
 
-**勘误 (经验 42 原表述修正):**
-- "Calc 心跳暂停也跳" → 应为 "**暂停照推**" (calc 心跳判定无 paused_ 门控, 暂停中仍 10fps; writer 才是暂停冻结)。语义分歧从未被有意决策, 迁移期 plan.heartbeat_when_paused 显式保留现状 (calc=true, writer=false)
-- "Impress force_frame_ 泄漏" → 已勘误 (见 P1'): 标志不泄漏, 真实缺陷是无意义+并发
-
 **FramePump 设计 (common/frame_pump.h/.cpp):**
 - `FramePumpPlan { tick_ms, heartbeat_ms, heartbeat_when_paused, fail_backoff_ms }` — 每链一份 plan 数据, 差异降维
 - `frame_mutex_` 串行所有 FrameFn 执行 (泵 tick + UpdateFrame 调用方就地执行, 否决"单线程委托"方案: 引入唤醒延迟且 Stopped 态仍须回退就地执行)
@@ -71,15 +55,7 @@
 | writer | 5ms | 100ms | false (Pause 冻结) | `force_frame_.exchange` (脏位) | 持 mu_ (访问 page_cache_) |
 | calc | 20ms (放宽原 5ms) | 100ms | true (Pause 照推) | `CheckViewportChanged` 持 mu_ (视口签名 row/col/sheet + force_frame_ 脏位) | 不持 mu_ (platform 自锁) |
 
-**迁移路径 (全部已完成):**
-- **阶段0** (2026-08-19): 各一行级修复, 立即消灭 P1/P5/P6, 临时防 P3 (已被阶段2-4 取代)
-- **阶段1** (2026-08-19): FramePump 组件 + 单测落地 (common/frame_pump.h/.cpp + frame_pump_test.cpp)
-- **阶段2** (2026-08-19): impress 接入 (无 probe 无心跳, 等价原 PollThread); demo 回归通过 (放映帧/1px/暂停恢复)
-- **阶段3** (2026-08-19): writer 接入 (脏位 probe, Pause 冻结); demo 回归通过
-- **阶段4** (2026-08-19): calc 接入 (视口签名+脏位 probe, Pause 照推, tick 20ms); demo 回归通过
-- **阶段5** (可选, 未做): 平台层段内比对 (CaptureFrame 增量 unchanged 参数, 省应用层 8.3MB 拷贝) + dedupe + calc zoom 维度 A/B
-
-**单测**: frame_pump_test.cpp 9 个测试 15 checks (Start 幂等/Stop 排空/Pause 冻结/UpdateFrame 串行/心跳/失败退避/重启/ChangeFn 探测/Start 重置 paused_ 回归), 全绿
+**阶段5 (可选, 未做)**: 平台层段内比对 (CaptureFrame 增量 unchanged 参数, 省应用层 8.3MB 拷贝) + dedupe + calc zoom 维度 A/B
 
 **开放问题 (不影响阶段0-4, 可延后):**
 - A. 帧新鲜度 TTL: 消费方是否存在"末帧超时视为无帧"? 决定心跳保留(近零成本) or 静止静默(收益最大)。dedupe 两阶段设计使该问题可延后且不返工
@@ -95,7 +71,7 @@
 - ② **命名**: Linux `~/.office-link/xvfb/`(内核跑在 Xvfb 上, 名字直指机制; 原 player/ 更名, 运行时数据无迁移负担)、Windows `desktops/<link>/<guid>/`(每 session 独立桌面); office_paths: `xvfb_profile()/desktop_profile()/user_template()`
 - ③ **模板 = 仓库 `templates/user/registrymodifications.xcu` 单文件**(126→66→69 item 两轮净化: 第一轮 66 条(保留 3 工具栏 Visible=false+Locked/TabBarVisible=false/SlideSorterBar 按视图/Misc.Start 放映 4 条/Sidebar ContextList 10 条/FirstRun=false/两个 Factory 窗口属性=固定值 `10,1,1920,1080;1;,,,;`(原值机器相关 3725x1992, 模板须跨机器); 剔除: 最近文件/Recovery/绝对路径/时间戳/Linguistic/ooLocale(让环境决定)/默认值写回约 60 条), 第二轮 +3 条补 sidebar/statusbar(见⑦)); 构建 POST_BUILD 随 OfficeRuntime 部署到 office/program/templates/
 - ④ **消费语义双平台统一**: 引导/会话创建时 fresh copy(回模板基线), Linux `SeedKernelProfile`(EnsureKernel 引导前; **活内核防护**: cmdline 含 soffice.bin+该 profile 的进程活着时跳过 — 跨进程共享内核复用路径绝不能删正在运行的内核的 profile), Windows 平台层 seed(office/user 退役)
-- ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20; **2026-08-18 用户 demo 肉眼验收: UI 全部隐藏(工具栏/TabBar/sidebar/statusbar), 编辑视图残留治理闭环**
+- ⑤ **实证**: 模板三要素(工具栏/TabBar/窗口属性固定值)在运行 profile 中生效且 LO 写回不覆盖; 全链探针 20/20
 - ⑥ **孤儿文档锁坑(新)**: 用户 UI soffice 会话退出后 `.~lock.<doc>#` 残留(锁跨 profile 生效!)→ 播放链 Hidden 加载返回空组件("doc loaded FAILED"), 表现为"任何 profile/模板配置下都失败" — 排查先查文档同目录锁文件; 2026-08-18 实测差点误判为模板回归
 - ⑦ **sidebar/statusbar 的真实存储位置(2026-08-18 定位, 模板第二轮 +3 条的依据)**:
   - **Sidebar(View>Sidebar, Ctrl+F5)不是 LayoutManager 元素** — SFX 子窗口, SID_SIDEBAR = SID_SVX_START(10000)+336 = **10336**(sfx2/source/sidebar/SidebarChildWindow.cxx `SFX_IMPL_DOCKINGWINDOW_WITHID(SidebarChildWindow, SID_SIDEBAR)`), 持久化在 `/org.openoffice.Office.Views/Windows` 的 **`WindowType['simpress/10336']`** 节点(2 item: UserData + WindowState)。序列化是整条路径进 `oor:path=`, **grep `oor:name="simpress/10336"` 查不到**(审计时易误判缺失)
@@ -139,9 +115,7 @@
 - ④ 架构 = 无平台层定案, Windows 侧 bootstrap 落 calc_session 的 `#ifdef _WIN32` 同款模式
 - ⑤ 并行会话协作约定: 清场命令(kill Xvfb)只处理自己的 display 号或先互查(:90 是共享运行时的, 12:46 实测互踩过一次)
 
-**上层接线(2026-08-17 二轮定稿)**:
-
-- ⑥ NovaOfficeCore/word 新增 LibreOfficeWriterManager(dlopen writerlink, 同构 LibreOfficeImpressManager); WordCoreExport 的 **WORD_PLAY_MODE 参数已存在但当前被忽略**——启用为正式分发(加枚举值, 定义在 NovaPlayer 侧头 NP_WORD_PLAY_MODE, 加值需跨仓库同步); 实际落地为**正式 mode 分发**(比原计划更进一步): WORD_PLAY_MODE_ANIMATION_LIBREOFFICE=3 走新链, 其余走 WordManager(PDF 链, 不动); 上层 Manager 方案(IWordManager/LibreOfficeWriterManager)2026-08-18 回退: writerlink 功能就绪但上层接线暂不接入; IWordManager.h 删除, WordCoreExport/WordManager 还原(回 shared_ptr<WordManager> 直接分发), LibreOfficeWriterManager.cpp/.h 作为样板保留(去 IWordManager 依赖, 不参与构建); NWordExportThumbnail 缩略图接口不动(自带缓存链, 与播放链互不干扰)
+**上层接线**: 已回退 (见 HANDOFF.md 1.7)。LibreOfficeWriterManager.cpp/.h 作为样板保留在 NovaOfficeCore/word/ (去 IWordManager 依赖, 不参与构建)。
 
 **质量收尾(2026-08-17 三轮)**:
 
