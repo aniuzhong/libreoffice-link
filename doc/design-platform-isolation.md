@@ -41,7 +41,7 @@
   P2  EnsureKernel → 空 ctx 则 BootstrapSession (calc/impress 均已此形态; writer 走 KernelHost)
   P3  SnapshotWindows + Hidden 加载          — 意图: 引导+加载须串行(经验 5)
   (BootSection::Release 不在 P3: 见 P5 后注*; 提前释放会 reintroduce 经验 5)
-  *Release 绑定点 = 当前 calc_session.cpp Create() 内 setVisible(P5) 之后 (boot_section->Release(), 经验 5)。setVisible(P5)
+  *Release 绑定点 = 当前 session.cpp Create() 内 setVisible(P5) 之后 (boot_section->Release(), 经验 5)。setVisible(P5)
    触碰共享内核须串行, Release 须在 P5 之后、首个 discover 之前调用; 提前到
    P3/SnapshotWindows 之后释放 = 并发 Create 卡死(经验 5)。core 显式调用此点。
   P4  [W@BeforeReveal]                   ← plan 绑定点 (calc/Win 在此发现+定型, 见 F 用例)
@@ -103,20 +103,20 @@ class LinkPlatform {
 
 | 现存位置 | 内容 | 归宿 |
 |---|---|---|
-| impress.cpp:39 / calc.cpp:58 / writer.cpp:17 | include office_runtime | 平台实现文件内(机制) |
-| impress.cpp:77 / calc.cpp:366 / writer.cpp:592 | destroy 时 terminate | `plan.terminate_on_destroy` + OnSessionEnd |
-| impress.cpp:117 / calc.cpp:221 / writer.cpp:117+190 | BootLock+Unlock | BeginBoot RAII + Release(释放点=协议 P3) |
-| impress.cpp:166-175 | 解锁+start 前找窗 | `plan.discover=AfterReveal`(impress/Linux) |
-| impress.cpp:188-211 | IsFullScreen 平台分支 | `plan.fullscreen` |
-| impress.cpp:219 | settle 2500ms | `plan.settle_ms` |
-| impress.cpp:277-289 | start 后 slot 落位 | `plan.form=AfterStart` + FormWindow |
-| impress.cpp:321-333 | Win 窗口化 A/B 兜底 | `plan.ui_hide_needed`;ORT_IMPRESS_FULLSCREEN 逃生门留在 Win 平台内 |
-| calc.cpp:302-309(Win) | reveal 前+找窗+落位+快捷键 | `discover=form=BeforeReveal` + FormWindow 内含快捷键(见 F) |
-| calc.cpp:317-327(Linux) | reveal 后找窗+落位 | `discover=form=AfterReveal` |
-| writer.cpp:35-82 | u2w/to_path/进程 ID | link_utils 机制层(**to_path 应上收 link_utils 三链共用**) |
-| writer.cpp:117-134+606 | Acquire/EnsureKernel/Release | 见 G(writer 引导缝) |
-| calc.cpp:33-45 | windows.h/FindWindow 宏 | 编译机制, 可留(或 os 头收拢) |
-| link_utils.cpp:18/38/75 | GetLinkDir/BootstrapSession/u2w 双实现 | 本职(它就是机制的家), 不动 |
+| impress/export.cpp:39 / calc/export.cpp:58 / writer/export.cpp:17 | include office_runtime | 平台实现文件内(机制) |
+| impress/export.cpp:77 / calc/export.cpp:366 / writer/export.cpp:592 | destroy 时 terminate | `plan.terminate_on_destroy` + OnSessionEnd |
+| impress/export.cpp:117 / calc/export.cpp:221 / writer/export.cpp:117+190 | BootLock+Unlock | BeginBoot RAII + Release(释放点=协议 P3) |
+| impress/export.cpp:166-175 | 解锁+start 前找窗 | `plan.discover=AfterReveal`(impress/Linux) |
+| impress/export.cpp:188-211 | IsFullScreen 平台分支 | `plan.fullscreen` |
+| impress/export.cpp:219 | settle 2500ms | `plan.settle_ms` |
+| impress/export.cpp:277-289 | start 后 slot 落位 | `plan.form=AfterStart` + FormWindow |
+| impress/export.cpp:321-333 | Win 窗口化 A/B 兜底 | `plan.ui_hide_needed`;ORT_IMPRESS_FULLSCREEN 逃生门留在 Win 平台内 |
+| calc/export.cpp:302-309(Win) | reveal 前+找窗+落位+快捷键 | `discover=form=BeforeReveal` + FormWindow 内含快捷键(见 F) |
+| calc/export.cpp:317-327(Linux) | reveal 后找窗+落位 | `discover=form=AfterReveal` |
+| writer/export.cpp:35-82 | u2w/to_path/进程 ID | link_utils 机制层(**to_path 应上收 link_utils 三链共用**) |
+| writer/export.cpp:117-134+606 | Acquire/EnsureKernel/Release | 见 G(writer 引导缝) |
+| calc/export.cpp:33-45 | windows.h/FindWindow 宏 | 编译机制, 可留(或 os 头收拢) |
+| base/link_utils.cpp:18/38/75 | GetLinkDir/BootstrapSession/u2w 双实现 | 本职(它就是机制的家), 不动 |
 
 ### F. 最微妙用例: calc 的 Windows 反序(设计容纳力的试金石)
 
@@ -179,7 +179,7 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 
 #### 问题
 
-Windows 回归 (85aae31f..HEAD) 在 calc_session.cpp 共享层新增 `InputLineVisible` dispatch
+Windows 回归 (85aae31f..HEAD) 在 session.cpp 共享层新增 `InputLineVisible` dispatch
 (公式栏隐藏), Linux demo 出现 menubar + 公式栏显示 (此前已通过)。
 
 #### 根因 (4 组对照实验闭合)
@@ -206,7 +206,7 @@ Windows 回归 (85aae31f..HEAD) 在 calc_session.cpp 共享层新增 `InputLineV
 
 #### 根本缺陷
 
-平台相关的 UI 修补 (InputLineVisible dispatch) 被放在共享层 (calc_session.cpp),
+平台相关的 UI 修补 (InputLineVisible dispatch) 被放在共享层 (session.cpp),
 其副作用平台相关 (Linux 共享内核破坏 vis=0 初始态, Windows 独立进程不破坏)。
 隔离设计只覆盖"平台机制"层, UI 隐藏逻辑被误当作平台无关。
 
@@ -217,21 +217,21 @@ Windows 回归 (85aae31f..HEAD) 在 calc_session.cpp 共享层新增 `InputLineV
 | 平台 | 实现 | 行为 |
 |------|------|------|
 | Linux (XvfbSessionPlatform) | 空操作 | LO Xvfb 无头环境 UI 默认 vis=0, 无需平台修补 |
-| Windows (WindowsPlatform) | InputLineVisible dispatch | 搬迁自 calc_session.cpp, 行为不变 |
+| Windows (WindowsPlatform) | InputLineVisible dispatch | 搬迁自 session.cpp, 行为不变 |
 
 会话层改动:
 ```cpp
-// calc_session.cpp P9 后
+// session.cpp P9 后
 platform_->HideUiExtras(frame_, factory, ctx_);  // 平台自决
 ```
 
 #### 改动清单
 
-- `common/link_platform.h`: 新增 HideUiExtras 虚函数 + UNO include
-- `common/linux/xvfb_platform.h`: HideUiExtras 空实现 override
-- `common/windows/win_platform.h`: HideUiExtras 声明 override
-- `common/windows/win_platform.cpp`: HideUiExtras 实现 (InputLineVisible dispatch 搬入)
-- `calc/calc_session.cpp`: InputLineVisible dispatch 块 → platform_->HideUiExtras()
+- `platform/link_platform.h`: 新增 HideUiExtras 虚函数 + UNO include
+- `platform/linux/xvfb_platform.h`: HideUiExtras 空实现 override
+- `platform/windows/win_platform.h`: HideUiExtras 声明 override
+- `platform/windows/win_platform.cpp`: HideUiExtras 实现 (InputLineVisible dispatch 搬入)
+- `calc/session.cpp`: InputLineVisible dispatch 块 → platform_->HideUiExtras()
 
 #### 验证
 
@@ -269,6 +269,6 @@ Part 2 已有 LinkPlatform 接口定稿形态 (D), 需补全:
 
 ### 3.3 反模式 (不做)
 
-- 在共享层调用平台专属 dispatch (如 InputLineVisible 是 calc/Windows 专属, 不应在 calc_session.cpp)
+- 在共享层调用平台专属 dispatch (如 InputLineVisible 是 calc/Windows 专属, 不应在 session.cpp)
 - 假设"平台机制隔离了 = UI 隔离了" (UI 隐藏副作用是平台相关的)
 - 为统一而统一 (Linux 不需要 InputLineVisible, 不应为了"对齐"而在 Linux 也调用)

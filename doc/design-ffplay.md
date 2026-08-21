@@ -1,6 +1,6 @@
 # FFplay 嵌入专项（HANDOFF.md 六章伴随文件）
 
-> ffplay 嵌入引擎 (office_runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 的尺寸链治理。
+> ffplay 嵌入引擎 (runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 的尺寸链治理。
 > 关联经验 34 (补丁式复用)、19b (软件渲染/Xvfb 无 GPU)、37 (并发创建竞态)。
 > 探针: tools/linux/ffplay_window_size_probe.cpp (engine 组, CMake `-DBUILD_TOOLS=ON`)。
 
@@ -100,7 +100,7 @@ UI checkBoxMute (NovaPlayerDemod)
 ### 3.3 关键设计点
 
 **① ctx_ 性质 (remote)**: ImpressSession::ctx_ 是 BootstrapOffice 返回的 remote
-XComponentContext (office_runtime.cpp:380-391 UnoUrlResolver::resolve 后 return remote)。
+XComponentContext (runtime.cpp:380-391 UnoUrlResolver::resolve 后 return remote)。
 ctx_ 不是 cppu::defaultBootstrap_InitialComponentContext 的 local (那个仅作 UnoUrlResolver
 客户端能力, 不传出 BootstrapOffice 边界)。
 
@@ -143,7 +143,7 @@ PASS: video-loop.pptx + ORT_MEDIA_BACKEND=ffplay, engines=1 SetMuteAll(true/fals
 
 **flush_on(info)**: 主进程/子进程异常退出 (SIGKILL/SIGTERM 或 dlclose 未触发析构)
 时 spdlog 默认 buffer 不 flush 会丢日志。`lg->flush_on(spdlog::level::info)` 保证
-每条 info 及以上立即落盘, 同时支持运行期 `tail -f` 实时监控。OfficeLog (office_runtime.cpp
+每条 info 及以上立即落盘, 同时支持运行期 `tail -f` 实时监控。OfficeLog (runtime.cpp
 InitOfficeLog) 同样加 flush_on。
 
 **为什么 ffplay.so 不能复用 OfficeLog**: ffplay.so 在 soffice.bin 子进程内 dlopen,
@@ -172,8 +172,8 @@ av_log_set_level 同步 ORT_LOG_LEVEL (debug→AV_LOG_DEBUG=48, info→AV_LOG_IN
 | `ffplay_embed.c` (L1400 video_open / L4040 ENGINE-DBG) | fprintf → av_log (经 callback 自动落盘) |
 | `ffplay_embed.patch` | 同步回填 (经验 34) |
 | `ffplay/CMakeLists.txt` | 加 spdlog include 路径 (`../../include`) |
-| `office_runtime.cpp` InitOfficeLog | 加 `logger->flush_on(spdlog::level::info)` |
-| `office_runtime.cpp` BootstrapOffice | osl_getProcessInfo 拿子进程 pid + 配对提示文案 |
+| `runtime.cpp` InitOfficeLog | 加 `logger->flush_on(spdlog::level::info)` |
+| `runtime.cpp` BootstrapOffice | osl_getProcessInfo 拿子进程 pid + 配对提示文案 |
 
 ### 4.3 配对方式
 
