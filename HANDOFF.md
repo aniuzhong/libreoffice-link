@@ -5,7 +5,7 @@
 > 经验编号被代码注释引用,**编号只增不改**;每次认知提升更新"二、经验"(带时间+置信度),完成事项移入"一、现状"。
 >
 > **分层阅读 (2026-08-20 重构)**: 本文件 = Core(每次必读: 现状/沙箱运行策略/经验索引/漏洞/待办);
-> 深度内容在 `doc/` 伴随文件,按需读取: [experiences.md](doc/experiences.md)(经验详述)/[design-platform-isolation.md](doc/design-platform-isolation.md)(平台隔离)/[design-framepump.md](doc/design-framepump.md)(帧泵)/[design-ffplay.md](doc/design-ffplay.md)(FFplay)/[attack-report.20260820.achieved.md](doc/attack-report.20260820.achieved.md)(攻击测试报告)。
+> 深度内容在 `doc/` 伴随文件,按需读取: [experiences.md](doc/experiences.md)(经验详述)/[design-platform-isolation.md](doc/design-platform-isolation.md)(平台隔离)/[design-framepump.md](doc/design-framepump.md)(帧泵)/[design-ffplay.md](doc/design-ffplay.md)(FFplay)。
 
 ---
 
@@ -60,7 +60,7 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Off
 ### 1.2 已验证能力
 
 - 单测 9 场景 50 检查(bootlock/slots/crossproc/acquire/adopt/dirtyenv/faultinj/linksmoke/gstcheck);加固后连续多轮全绿(经验 35)
-- 探针回归(登记 9 个,`build_probes.sh`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)
+- 探针回归(登记 9 个, CMake `-DBUILD_TOOLS=ON`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)
 - **同页双视频并行播放**(dual_media.pptx 实证,经验 37);Demo 实测三画面/翻页正常;媒体页真实视频+音频
 - **writerlink 底层链路已闭环**(writerlink,经验 38):底层(翻页 20-53ms/页、LRU、缓存命中 0ms、Prev 验证)探针实测全绿。**上层接线已回退(2026-08-18)**:NovaOfficeCore/NovaPlayer/NovaPlayerDemo 的 word LibreOffice 接入改动(IWordManager 抽象/LibreOfficeWriterManager 分发/NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举/Demo Word 模式下拉框)整体还原,功能就绪待后续接入。LibreOfficeWriterManager.cpp/.h 作为样板保留(NovaOfficeCore/word/,不参与构建,去 IWordManager 依赖)
 - 抓帧性能:XShm 1080p ~1ms/1440p ~2.5ms/2160p ~5.9ms;Xvfb 30720x2160 RSS ~300MB
@@ -76,14 +76,16 @@ cd NovaPlayerTools && ./build_in_linux.sh
 # 产物直出部署目录 NovaPlayer/bin_<arch>_<sys>/office/program (单副本)。
 # 注意: 部署目录在 NovaPlayer/ 下 (不是 NovaPlayerTools/, 后者同名目录为空)。
 
-# 探针编译 (仓库根 xvfb_calc_demo/, 项目外工具; 登记表见脚本注释)
-cd xvfb_calc_demo && ./build_probes.sh [probe_name ...]
+# 探针编译 (CMake 子模块, 默认不编译; 源码在 tools/linux/, 素材在 tools/data/)
+cmake -S . -B build -DBUILD_TOOLS=ON -DLIBREOFFICE_SDK_ROOT=/path/to/office/sdk
+cmake --build build --target probes -j$(nproc)
+# 或单探针: cmake --build build --target impress_nextpage_probe
 
 # 并发回归 (2 xlsx + pptx)
-xvfb_calc_demo/impress_multi_probe "志愿分析.xlsx" "7-8月报销明细表-正式版.xlsx" "AI时代.pptx"
+build/tools/impress_multi_probe "tools/data/志愿分析.xlsx" "tools/data/7-8月报销明细表-正式版.xlsx" "tools/data/AI时代.pptx"
 # 媒体回归 (双态)
-xvfb_calc_demo/media_green_probe "AI时代.pptx"                      # 默认 ffplay
-ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
+build/tools/media_green_probe "tools/data/AI时代.pptx"                      # 默认 ffplay
+ORT_MEDIA_BACKEND=gstreamer build/tools/media_green_probe "tools/data/AI时代.pptx"  # 回退 gst
 ```
 
 ### 1.4 沙箱运行策略(必读)
@@ -97,7 +99,7 @@ ORT_MEDIA_BACKEND=gstreamer xvfb_calc_demo/media_green_probe "..."  # 回退 gst
 - **破解①(推荐, 2026-08-20 实证)**: `ORT_HOME=/tmp/ort_xxx` 跑探针 — office_paths 原生基目录覆盖(设计用途即探针/多实例隔离), profile/logs 全部改道 /tmp (sandbox 可写), 零代码改动全链路 bootstrap 成功; 附带 `LD_LIBRARY_PATH=<deploy>/office/program` (探针 RUNPATH 已烧入, 手动设置时必须绝对路径)
 - **破解②**: sandbox 配置放行 `~/.office-link/` 读写,或无 sandbox 环境跑。真实部署环境无此限制。代码逻辑已 shell 手动 `cp` 验证正确,纯属 sandbox 文件策略
 - **探针输入用绝对路径** (2026-08-20 实证): 相对路径 `test.xlsx` → `getFileURLFromSystemPath` 产出相对 URL → `loadComponentFromURL` 抛 IllegalArgumentException (UNO 异常**不继承** std::exception, 见 1.4 末尾冷知识)
-- **探针用 pptx 素材注意** (2026-08-20 实证): `xvfb_calc_demo/test.pptx` (gen_test_pptx.py 生成, 9 entries) 在共享内核+Hidden 加载下静默返回 null (`soffice --convert-to` 却能识别); 换 LO 源码树完整 pptx (如 `xmloff/qa/unit/data/Reference-ThemeColors-TextAndFill.pptx`) 加载正常
+- **探针用 pptx 素材注意** (2026-08-20 实证): `tools/data/pptx/test.pptx` (gen_test_pptx.py 生成, 9 entries) 在共享内核+Hidden 加载下静默返回 null (`soffice --convert-to` 却能识别); 换 LO 源码树完整 pptx (如 `xmloff/qa/unit/data/Reference-ThemeColors-TextAndFill.pptx`) 加载正常
 
 #### 跑前清场
 
@@ -157,7 +159,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 - `common/linux/xvfb_platform.cpp` — XShm 抓帧 + BGRX 字节序直拷 + 窗口扫描/落位
 - `common/frame_pump.h/.cpp` — FramePump 统一帧泵 (经验 42, 三链接入)
 - `calc|impress/*_session.cpp` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 窗口化放映 + gotoNextEffect 翻页)
-- `xvfb_calc_demo/build_probes.sh` — 探针登记表(过时探针不登记,旧二进制可手动跑)
+- `tools/CMakeLists.txt` — 探针编译 (CMake 子模块, `-DBUILD_TOOLS=ON`; 源码在 `tools/linux/`, 素材在 `tools/data/`)
 
 ### 1.7 当前状态与注意事项
 
@@ -171,7 +173,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 - **writer_cache 总量回收已落地(2026-08-18,简单策略)**:写入后总量超限(ORT_WRITER_CACHE_MB,默认 500MB)按 mtime 最旧删除,排除当前会话文件;实测 1MB 上限 3 文档触发淘汰正常
 - 诊断开关:ORT_DUMP_WINDOWS=1(窗口树/重叠/边缘像素);ffplay video_open 打印 renderer 后端
 - **writerlink 上层接线已回退(2026-08-18)**:writerlink.so 功能就绪(探针全绿),但 NovaOfficeCore/NovaPlayer/NovaPlayerDemo 的接入改动整体回退(IWordManager 抽象删除、WordCoreExport/WordManager 还原、NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举移除、Demo Word 模式下拉框移除)。LibreOfficeWriterManager.cpp/.h 作为样板保留在 NovaOfficeCore/word/(去 IWordManager 依赖,不参与 CMake/vcxproj 构建),后续接入时恢复继承+override+构建配置即可。NovaLibreOfficePlayer/writer/ 本身不动
-- **攻击性测试 (2026-08-20)**: 攻击探针 (`attack_uaf_probe` / `attack_resize_probe` / `attack_pagenav_probe` / `attack_mute_teardown_probe` / `attack_lock_inversion` / `attack_cb_join_self`, 登记于 `xvfb_calc_demo/build_probes.sh` 链接组 `attack_new`), 发现 V1-V6 共 6 项可复现崩溃/卡死。V1/V4 已关闭 (AbiCall+SessionRegistry+destroyed_), V2 已修复 (SetWindowSize 去 sleep + SetResolution 50ms 节流), V5 已关闭 (API 锁序约束注释), V6 已修复 (FramePump::Stop 线程 ID 检测防 join self)。V3 待修。详见 `doc/attack-report.20260820.achieved.md`。
+- **攻击性测试 (2026-08-20)**: 攻击探针 (`attack_uaf_probe` / `attack_resize_probe` / `attack_pagenav_probe` / `attack_mute_teardown_probe` / `attack_lock_inversion` / `attack_cb_join_self`, 登记于 `tools/CMakeLists.txt` 链接组 `add_multi_tools`), 发现 V1-V6 共 6 项可复现崩溃/卡死。V1/V4 已关闭 (AbiCall+SessionRegistry+destroyed_), V2 已修复 (SetWindowSize 去 sleep + SetResolution 50ms 节流), V5 已关闭 (API 锁序约束注释), V6 已修复 (FramePump::Stop 线程 ID 检测防 join self)。V3 待修。攻击报告已归档 (git 历史可查 `doc/attack-report.20260820.achieved.md`)。
 
 ---
 
@@ -210,7 +212,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | 23 | **自研 BootstrapOffice**(复制 cppu::bootstrap,零 LO 源码改动,-env:UserInstallation 支持独立内核)。四个坑:① 先 set URE_BOOTSTRAP(缺→binaryurp 段错误)② 客户端进程需 UNO_PATH ③ 连接串 StarOffice.ComponentContext + UNO_QUERY_THROW ④ osl_executeProcess 原样。引导 ~504ms(旧 ~1004ms) | 08-13 | 高 |
 | 24 | **env 经 osl_executeProcess 快照继承**:SAL_*/GST_*/ORT_* 等运行时 getenv 的变量只需引导前 setenv,**不必写 run.sh**;例外(启动期决定):LD_LIBRARY_PATH/libstdc++/LD_PRELOAD | 08-13 | 高 |
 | 25 | **libstdc++ SONAME 单例**:宿主预加载系统 6.0.28 后 dlopen calclink 缺 GLIBCXX 符号失败。已落地:links 加 `-Wl,-rpath,<deploy>` + 显式链部署目录 libstdc++ 6.0.30(主程序 RUNPATH 参与间接依赖解析)。run.sh 的 $CURDIR(ffmpeg 库)仍必需;soffice 侧靠脚本自设。**陷阱**:env -i 缺 LANG 时 LO 报 type detection failed,勿误判为库问题 | 08-13 | 高 |
-| 31 | **统一构建树**(2026-08-13):NovaLibreOfficePlayer 并入 NovaPlayerTools cmake 单一树,build_links_linux.sh 退役,ABI 同步由依赖图承接(links 链 OfficeRuntime target)。坑:① 伞 target 改名后 -Bsymbolic 需手动应用 ③ ld 对直接 .so 输入按 basename 记 DT_NEEDED ⑤ ffplay 链 ffmpeg 需 --no-as-needed ⑥ 探针不参与统一树(build_probes.sh,项目根 xvfb_calc_demo/) | 08-13 | 高 |
+| 31 | **统一构建树**(2026-08-13):NovaLibreOfficePlayer 并入 NovaPlayerTools cmake 单一树,build_links_linux.sh 退役,ABI 同步由依赖图承接(links 链 OfficeRuntime target)。坑:① 伞 target 改名后 -Bsymbolic 需手动应用 ③ ld 对直接 .so 输入按 basename 记 DT_NEEDED ⑤ ffplay 链 ffmpeg 需 --no-as-needed ⑥ 探针不参与统一构建树(CMake 子模块 `tools/`, `-DBUILD_TOOLS=ON` 开启) | 08-13 | 高 |
 | 32 | **平台层归组重构**(2026-08-14,消 77% 重复):按环境归组 common/{linux,windows},规则参数化(窗口匹配规则=文档类型差异,工厂各 2 行);会话层不强提基类;common STATIC 链入各 link,log.h 实现保持 office_runtime 单例(双份=spdlog 双写) | 08-14 | 高 |
 | 33 | **.so 路径错位 + CMake 缓存自愈**:① 双份 .so 时 dladdr(GetRuntimeDir)错位→UNO_PATH 错→rc=4;修复=四件套 per-target 输出部署目录单副本 ② FindLibreOfficeSDK 模块移动后旧缓存 FATAL;修复=NOT EXISTS 时 FORCE 重推导 | 08-14 | 高 |
 | 35 | **Xvfb 垂死窗口竞态家族(2026-08-17)**:① 大屏 Xvfb(~300MB)SIGKILL 后垂死窗口内 socket 仍监听,同号立即重启必 "server already running" 失败;残留 socket 文件(无活 server)无害。杀后必须等死透(ProcAlive 轮询;**waitpid 对非子进程 ECHILD 无效**)。测试/探针侧 CleanXvfbBattlefield/SafeKill/StopXvfb 均已"杀→等死透→清 lock+socket";office_runtime 侧 StopXvfb 清 lock+socket、StartXvfb fork 前清残留+lost-race 清残局(扫号重试本身已是正确自愈) ② **kill(0)/kill(-1) 灭组**:pid 来自 lock/管道读回,竞态下可能 0/-1(kill(0)=杀进程组,实测测试+tail 全家死,无 core 无日志);SafeKill 统一 guard(pid>0 && ≠self)+ SpawnOrphan 读回校验 + 断言不假设 :90(display 号感知)。**操作速查见 1.4 沙箱运行策略** | 08-17 | 高 |
@@ -345,7 +347,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 ## 七、已知漏洞 [1 待修/5 已修] (updated 2026-08-20)
 
 > 攻击性测试发现的漏洞。已修复的标注"已修复"并保留在此供查阅。
-> 复现探针: `xvfb_calc_demo/build_probes.sh` 链接组 `attack_new` (attack_uaf/attack_resize/attack_pagenav/attack_mute_teardown/attack_lock_inversion/attack_cb_join_self)。
+> 复现探针: `tools/CMakeLists.txt` 链接组 `add_multi_tools` (attack_uaf/attack_resize/attack_pagenav/attack_mute_teardown/attack_lock_inversion/attack_cb_join_self)。
 
 ### V1: Destroy 与帧泵竞态 (竞态崩溃) — 已关闭 (2026-08-20 实证, 症状消除)
 
@@ -404,6 +406,36 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 - **关联经验**: 42 (FramePump 契约, Stop 语义)
 
 ---
+
+## X、构建 [构建·经验归集] (updated 2026-08-21)
+
+
+> 构建系统专项: 单一树哲学 / 依赖发现上提 / 部署单副本 / 跨平台参数边界 / 模拟环境限制。
+> 编号经验 (31/33/23/25/36) 原文在主索引 (二章表格) 与详述 (doc/experiences.md), 此处归集其构建维度要点 + 本次重构结论, **编号只增不改**。
+
+### X.1 单一构建树与依赖发现 (经验 31)
+
+- **单一树**: `NovaLibreOfficePlayer` 并入 `NovaPlayerTools` cmake 单一树; 伞 `CMakeLists.txt` 只做 `add_subdirectory`, 依赖发现 (LibreOfficeSDK/Threads/X11) **统一在根完成**, 子树只声明 target (ABI 同步由依赖图承接: links 链 OfficeRuntime/Common target, 经验 31)。
+- **重构 (2026-08-21)**: 删除 6 个子目录的 `project()` + 重复的 `cmake_minimum_required`/`find_package`/`set(CMAKE_CXX_STANDARD)` 样板 (约 42 行), 上提到根。子 project() 在单一树场景下冗余 (target 名硬编码、无独立 install/export; 仅 Windows VS 下有微弱 IDE 分组收益); 编译器/标准检测根已做, 子树继承。根 `cmake_minimum_required` 由 3.13 升到 3.16 统一版本。
+- **等价性**: 重构未碰 target 名 / MSVC 参数 (`if(MSVC)` 的 `/utf-8` `/EHsc`) / 链接与部署逻辑 / 编译宏定义 → 各 target 最终编译命令集合不变 → 回归无忧 (Linux 真编 100% + 单测全绿实证)。
+
+### X.2 部署单副本 (经验 33 / 31)
+
+- **四件套 per-target 输出部署目录单副本**: 各 target `LIBRARY_OUTPUT_DIRECTORY` 直指部署目录 `office/program` (非顶层 bin 根), `POST_BUILD` 拷贝。双份 .so → dladdr(GetRuntimeDir) 错位 → UNO_PATH 错 → bootstrap rc=4。
+- **CMake 缓存自愈 (经验 33)**: `FindLibreOfficeSDK` 模块移动后旧缓存 FATAL; 修复 = `NOT EXISTS` 时 `FORCE` 重推导。默认路径 `common/cmake` 上溯 4 级到 `NovaPlayer` 在当前机器失效 (真实路径 `NovaPlayerProject/NovaPlayer`), **须显式 `-DLIBREOFFICE_SDK_ROOT=xxx` 覆盖** (注释已标注)。
+
+### X.3 引导与运行时参数 (经验 23 / 25 / 36)
+
+- **BootstrapOffice (经验 23)**: 复制 `cppu::bootstrap`, 零 LO 源码改动; `-env:UserInstallation` 支持独立内核。四坑: ① 先 `set URE_BOOTSTRAP` ② 客户端需 `UNO_PATH` ③ 连接串 `StarOffice.ComponentContext` ④ `osl_executeProcess` 原样。引导 ~504ms。
+- **libstdc++ SONAME 单例 (经验 25)**: 宿主预加载系统 6.0.28 后 dlopen link 缺 GLIBCXX 符号失败。修复 = links 加 `-Wl,-rpath,<deploy>` + 显式链部署目录 libstdc++ 6.0.30 (组件自包含, 免 `LD_LIBRARY_PATH`)。`env -i` 缺 `LANG` 时 LO 报 type detection failed, 勿误判为库问题。
+- **相对 LD_LIBRARY_PATH 陷阱 (经验 36)**: 手动跑探针/单测用相对路径 → dladdr → UNO_PATH 相对化 → bootstrap SIGABRT。探针/单测烧入绝对 RUNPATH 免设直接跑; 手动设置必须绝对路径。部署目录 = `NovaPlayer/bin_<arch>_<sys>` (非 `NovaPlayerTools/`)。
+
+### X.4 跨平台参数边界
+
+- **MSVC 专属参数** (`/utf-8` 防 GBK 注释吞换行 C4819 / `/EHsc` UNO 异常展开 / `_CRT_SECURE_NO_WARNINGS`): 仅真 MSVC 编译生效, 由根 `if(MSVC)` 块设置, **重构不碰**。Windows 分支当前未做独立编译验证 (双平台推进暂缓), MSVC 参数正确性待 Windows 侧确认。
+- **平台差异**: `office_runtime`/X11/ffplay 为 Linux 专属, 收进根 `if(NOT WIN32)` 块; Windows 走每 session 独立 soffice, 不编 office_runtime (经验 39)。
+
+
 
 ## 已关闭事项
 

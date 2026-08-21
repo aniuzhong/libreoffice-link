@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(
     NovaLibreOfficePlayer # libreoffice-link
     VERSION 0.1
-    LANGUAGES CXX
+    LANGUAGES CXX C
 )
 
 # 单一构建树: 依赖发现统一在根完成, 子树只声明 target (经验 31)。
@@ -47,3 +47,8 @@ add_subdirectory(common)     # 平台公共层 (LinkPlatform 接口/工具/Xvfb/
 add_subdirectory(calc)       # CalcLink      -> calclink.so
 add_subdirectory(impress)    # ImpressLink   -> impresslink.so
 add_subdirectory(writer)     # WriterLink    -> writerlink.so (自治 PDF 位图, 经验 38)
+
+option(BUILD_TOOLS "Build probes (Linux only, requires deploy done)" OFF)
+if(BUILD_TOOLS)
+    add_subdirectory(tools)
+endif()

@@ -2,7 +2,7 @@
 
 > ffplay 嵌入引擎 (office_runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 的尺寸链治理。
 > 关联经验 34 (补丁式复用)、19b (软件渲染/Xvfb 无 GPU)、37 (并发创建竞态)。
-> 探针: xvfb_calc_demo/ffplay_window_size_probe.cpp (engine 组, 直接验证引擎)。
+> 探针: tools/linux/ffplay_window_size_probe.cpp (engine 组, CMake `-DBUILD_TOOLS=ON`)。
 
 ## 1. video_open 尺寸修复 — 已闭环 (2026-08-19)
 

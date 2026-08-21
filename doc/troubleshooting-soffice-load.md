@@ -48,10 +48,10 @@ session Create 可在 `getFileURLFromSystemPath` 后校验 URL 以 `file://` 开
 否则用 `realpath` 补全。优先级低 (产品调用方传绝对路径)。
 
 ### 4.3 验证侧 (已建)
-新增 `minimal_load_probe` (xvfb_calc_demo/), 最简 URP 远程 loadComponentFromURL
+新增 `minimal_load_probe` (tools/linux/), 最简 URP 远程 loadComponentFromURL
 验证, 不依赖 session/FramePump/平台层。用法:
 ```bash
-./minimal_load_probe /abs/path/to/file.xlsx
+build/tools/minimal_load_probe /abs/path/to/file.xlsx
 ```
 
 ## 5. 残留问题: pptx URP 远程加载返回 null
