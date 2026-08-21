@@ -8,22 +8,24 @@ else()
 endif()
 
 add_library(CalcLink SHARED
-    calclink.cpp
-    calc_session.cpp)
+    export.cpp
+    session.cpp)
 set_target_properties(CalcLink PROPERTIES OUTPUT_NAME calclink PREFIX "")
-# 构建输出目录 = 部署目录 (同 office_runtime, 防 .so 双份致 GetRuntimeDir 错位)
+# 构建输出目录 = 部署目录 (同 runtime, 防 .so 双份致 GetRuntimeDir 错位)
 set_target_properties(CalcLink PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CALCLINK_DEPLOY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CALCLINK_DEPLOY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CALCLINK_DEPLOY_DIR}")
-# 平台公共层 (link_platform 接口/link_utils/common 平台实现; common 链
-# OfficeRuntime -> DT_NEEDED=office_runtime.so 运行时经 RUNPATH 解析, 经验 31)
-target_link_libraries(CalcLink PRIVATE common)
-target_include_directories(CalcLink PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../office_runtime")
+# abi (导出宏/守卫) + base (link_utils/log) + platform (LinkPlatform 实现) +
+# frame (FramePump); platform 链 OfficeRuntime -> DT_NEEDED=office_runtime.so
+# 运行时经 RUNPATH 解析, 经验 31
+target_link_libraries(CalcLink PRIVATE abi base platform frame)
+target_include_directories(CalcLink PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../runtime")
 target_compile_options(CalcLink PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_include_directories(CalcLink PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libreoffice"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
 
 if(UNIX AND NOT APPLE)
     target_compile_definitions(CalcLink PRIVATE SAL_UNX UNX LINUX GCC)

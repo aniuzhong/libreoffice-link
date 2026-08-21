@@ -10,9 +10,9 @@ project(
 )
 
 # 单一构建树: 依赖发现统一在根完成, 子树只声明 target (经验 31)。
-# LibreOffice::Sdk / Threads 双平台都需要; X11 仅 Linux (office_runtime 专属,
+# LibreOffice::Sdk / Threads 双平台都需要; X11 仅 Linux (runtime 专属,
 # Windows 走独立 soffice 不编, 经验 39)。
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/common/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/cmake")
 find_package(LibreOfficeSDK REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -35,15 +35,18 @@ if(MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# office_runtime (共享内核/Xvfb/slot/ffplay 单测) 与 X11 为 Linux 专属;
-# Windows 走每 session 独立 soffice, 不编 office_runtime (经验 39)。
+# runtime (共享内核/Xvfb/slot/ffplay 单测) 与 X11 为 Linux 专属;
+# Windows 走每 session 独立 soffice, 不编 runtime (经验 39)。
 # 双平台共享模块统一列出, 平台差异收敛到下方 if(NOT WIN32) 一块。
 if(NOT WIN32)
     find_package(X11 REQUIRED COMPONENTS Xfixes Xinerama Xmu)
-    add_subdirectory(office_runtime)   # OfficeRuntime -> office_runtime.so (+ ffplay + 单测)
+    add_subdirectory(runtime)      # OfficeRuntime -> office_runtime.so (+ ffplay + 单测)
 endif()
 
-add_subdirectory(common)     # 平台公共层 (LinkPlatform 接口/工具/Xvfb/win 实现)
+add_subdirectory(abi)        # C ABI 导出层 (header-only: LINK_API 宏/session_registry)
+add_subdirectory(base)       # 基础工具 (link_utils/log/office_paths)
+add_subdirectory(platform)   # 平台抽象 (LinkPlatform 接口/linux/xvfb + windows/win 实现)
+add_subdirectory(frame)      # 帧泵 (FramePump, 经验 42)
 add_subdirectory(calc)       # CalcLink      -> calclink.so
 add_subdirectory(impress)    # ImpressLink   -> impresslink.so
 add_subdirectory(writer)     # WriterLink    -> writerlink.so (自治 PDF 位图, 经验 38)

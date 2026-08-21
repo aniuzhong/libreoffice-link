@@ -37,7 +37,7 @@ target_include_directories(FFplay PRIVATE
     ${FFMPEG_INC_DIR}
     "${FFMPEG_INC_DIR}/libavutil"               # 内部头相对 include (libm.h 等)
     "${NOVAPLAYER_DLL_DIRECTORY}/../include/SDL2"  # Nova SDL2 头 (2.32.8, 与库匹配)
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../include")   # spdlog (header-only, ffplay_log.h 依赖)
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party")   # spdlog (header-only, ffplay_log.h 依赖)
 target_compile_definitions(FFplay PRIVATE SAL_UNX UNX LINUX GCC)
 # 嵌入模式 + kylin 兼容: sys/time.h 不含 struct tm, 预包含 time.h (经验 34)
 target_compile_definitions(FFplay PRIVATE FFPLAY_EMBED _GNU_SOURCE)
@@ -47,7 +47,7 @@ target_compile_options(FFplay PRIVATE "-include;/usr/include/time.h")
 #   - UNO 符号 (libuno_*.so.3) 由内核进程已加载库解析 -> 放宽链接检查
 #   - ffmpeg 库在 bin_<arch>_<sys> 根, 即部署目录 (office/program) 上两级
 #     -> RUNPATH $ORIGIN/../.. 自足; 运行时 soffice 脚本自设的
-#     LD_LIBRARY_PATH 也含 bin 根 (双保险, 2026-08-14 审查修正)
+#     LD_LIBRARY_PATH 也含 bin 根 (双保险)
 #   - 引擎 (ffplay_embed.c, 经验 34) 真实调用 ffmpeg/SDL2, 由 NEEDED 带入 soffice 进程
 target_link_libraries(FFplay PRIVATE
     -Wl,--allow-shlib-undefined

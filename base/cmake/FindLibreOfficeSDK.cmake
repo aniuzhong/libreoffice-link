@@ -30,7 +30,7 @@ endif()
 
 if(NOT LIBREOFFICE_UNO_INCLUDE OR NOT EXISTS "${LIBREOFFICE_UNO_INCLUDE}")
     set(LIBREOFFICE_UNO_INCLUDE
-        "${CMAKE_CURRENT_LIST_DIR}/../../include"
+        "${CMAKE_CURRENT_LIST_DIR}/../../third_party/libreoffice"
         CACHE PATH "Full UNO IDL header tree (com/sun/star/**)" FORCE)
 endif()
 

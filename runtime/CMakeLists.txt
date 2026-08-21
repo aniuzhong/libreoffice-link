@@ -3,7 +3,7 @@ get_filename_component(OR_DEPLOY_DIR "${LIBREOFFICE_SDK_ROOT}/.." ABSOLUTE)
 set(OR_DEPLOY_DIR "${OR_DEPLOY_DIR}/program")
 
 add_library(OfficeRuntime SHARED
-    office_runtime.cpp)
+    runtime.cpp)
 set_target_properties(OfficeRuntime PROPERTIES OUTPUT_NAME office_runtime PREFIX "")
 # 构建输出目录 = 部署目录 (office/program): 顶层全局输出目录 (bin 根) 会致
 # .so 双份存在, demo 的 LD_LIBRARY_PATH=$CURDIR 优先加载 bin 根版本 ->
@@ -16,7 +16,8 @@ set_target_properties(OfficeRuntime PROPERTIES
 target_link_libraries(OfficeRuntime PRIVATE LibreOffice::Sdk)
 target_include_directories(OfficeRuntime PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libreoffice"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
 
 target_compile_definitions(OfficeRuntime PRIVATE SAL_UNX UNX LINUX GCC)
 
@@ -44,16 +45,19 @@ add_custom_command(TARGET OfficeRuntime POST_BUILD
 add_subdirectory(ffplay)
 
 # ---- 单测 (统一树内编译, 不部署; 跑法见 HANDOFF 1.3) ----
-add_executable(office_runtime_test
-    office_runtime_test.cpp)
-set_target_properties(office_runtime_test PROPERTIES
+# 可执行名保持 office_runtime_test (回归命令兼容), 源码名 runtime_test.cpp
+add_executable(runtime_test
+    runtime_test.cpp)
+set_target_properties(runtime_test PROPERTIES
+    OUTPUT_NAME office_runtime_test
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-target_include_directories(office_runtime_test PRIVATE
+target_include_directories(runtime_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../include")
-target_link_libraries(office_runtime_test PRIVATE OfficeRuntime)
-target_link_libraries(office_runtime_test PRIVATE LibreOffice::Sdk) # UNO 头 + CPPU_ENV
-target_compile_definitions(office_runtime_test PRIVATE SAL_UNX UNX LINUX GCC)
-target_link_libraries(office_runtime_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libreoffice"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
+target_link_libraries(runtime_test PRIVATE OfficeRuntime)
+target_link_libraries(runtime_test PRIVATE LibreOffice::Sdk) # UNO 头 + CPPU_ENV
+target_compile_definitions(runtime_test PRIVATE SAL_UNX UNX LINUX GCC)
+target_link_libraries(runtime_test PRIVATE
     -Wl,--allow-shlib-undefined
     Threads::Threads rt dl X11::X11)
