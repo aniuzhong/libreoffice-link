@@ -1,12 +1,20 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(
-    NovaLibreOfficePlayer
+    NovaLibreOfficePlayer # libreoffice-link
     VERSION 0.1
     LANGUAGES CXX
 )
+
+# 单一构建树: 依赖发现统一在根完成, 子树只声明 target (经验 31)。
+# LibreOffice::Sdk / Threads 双平台都需要; X11 仅 Linux (office_runtime 专属,
+# Windows 走独立 soffice 不编, 经验 39)。
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/common/cmake")
+find_package(LibreOfficeSDK REQUIRED)
+find_package(Threads REQUIRED)
 
 # MSVC 变量须在 project() 之后才定义 (编译器检测); 之前判断恒真会把 -fPIC
 # 传给 MSVC (D9002 警告, 2026-08-18 探针回归时发现)
@@ -31,8 +39,6 @@ endif()
 # Windows 走每 session 独立 soffice, 不编 office_runtime (经验 39)。
 # 双平台共享模块统一列出, 平台差异收敛到下方 if(NOT WIN32) 一块。
 if(NOT WIN32)
-    find_package(PkgConfig REQUIRED)
-    find_package(Threads REQUIRED)
     find_package(X11 REQUIRED COMPONENTS Xfixes Xinerama Xmu)
     add_subdirectory(office_runtime)   # OfficeRuntime -> office_runtime.so (+ ffplay + 单测)
 endif()

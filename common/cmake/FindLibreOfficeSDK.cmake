@@ -1,8 +1,8 @@
 # 默认定位 NovaPlayer 部署目录下的 LO SDK。
 # Linux 布局与 NovaPlayerTools/build_in_linux.sh 一致: bin_<arch>_<sys>/office (kylin/uos/linux),
 # Windows 为 bin/office。可通过 -DLIBREOFFICE_SDK_ROOT=xxx 覆盖。
-# 缓存自愈: 缓存值失效 (目录被移动/删除) 时重新推导 (2026-08-14 踩过:
-# 模块从 calc/cmake 移到 common/cmake 后, 旧缓存路径指向已删目录)。
+# 缓存自愈: 缓存值失效 (目录被移动/删除) 时重新推导 (模块从 calc/cmake 移到
+# common/cmake 后, 旧缓存路径指向已删目录)。
 if(NOT LIBREOFFICE_SDK_ROOT OR NOT EXISTS "${LIBREOFFICE_SDK_ROOT}")
     set(_NOVA_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../NovaPlayer")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

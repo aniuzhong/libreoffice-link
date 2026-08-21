@@ -1,13 +1,3 @@
-cmake_minimum_required(VERSION 3.16)
-project(WriterLink LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake")
-find_package(LibreOfficeSDK REQUIRED)
-find_package(Threads REQUIRED)
-
 # 部署目录由 SDK 根统一推导 (单一构建树内不用 CACHE 变量, 避免缓存旧值)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     get_filename_component(_LO_SDK_PARENT "${LIBREOFFICE_SDK_ROOT}/.." ABSOLUTE)

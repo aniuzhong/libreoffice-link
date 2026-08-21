@@ -1,14 +1,3 @@
-cmake_minimum_required(VERSION 3.16)
-project(OfficeRuntime LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake")
-find_package(LibreOfficeSDK REQUIRED)
-find_package(Threads REQUIRED)
-find_package(X11 REQUIRED)
-
 # 部署目录由 SDK 根统一推导 (单一构建树内不再用 CACHE 变量, 避免缓存旧值)
 get_filename_component(OR_DEPLOY_DIR "${LIBREOFFICE_SDK_ROOT}/.." ABSOLUTE)
 set(OR_DEPLOY_DIR "${OR_DEPLOY_DIR}/program")
