@@ -12,7 +12,7 @@ project(
 # 单一构建树: 依赖发现统一在根完成, 子树只声明 target (经验 31)。
 # LibreOffice::Sdk / Threads 双平台都需要; X11 仅 Linux (runtime 专属,
 # Windows 走独立 soffice 不编, 经验 39)。
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(LibreOfficeSDK REQUIRED)
 find_package(Threads REQUIRED)
 

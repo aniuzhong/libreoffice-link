@@ -1,12 +1,11 @@
 # 默认定位 NovaPlayer 部署目录下的 LO SDK。
 # Linux 布局: bin_<arch>_<sys>/office (kylin/uos/linux), Windows 为 bin/office。
-# 默认推导依赖相对路径 (common/cmake 上溯至 NovaPlayerTools 父级), 机器布局不符时
+# 默认推导依赖相对路径 (cmake/ 上溯至 NovaPlayerProject), 机器布局不符时
 # 须显式 -DLIBREOFFICE_SDK_ROOT=xxx 覆盖 (当前机器 NovaPlayer 在 NovaPlayerProject/ 下,
 # 默认推导失效, 以显式传参为准)。
-# 缓存自愈: 缓存值失效 (目录被移动/删除) 时重新推导 (模块从 calc/cmake 移到
-# common/cmake 后, 旧缓存路径指向已删目录)。
+# 缓存自愈: 缓存值失效 (目录被移动/删除) 时重新推导。
 if(NOT LIBREOFFICE_SDK_ROOT OR NOT EXISTS "${LIBREOFFICE_SDK_ROOT}")
-    set(_NOVA_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../NovaPlayer")
+    set(_NOVA_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../NovaPlayer")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
             set(_NOVA_ARCH aarch64)
@@ -30,7 +29,7 @@ endif()
 
 if(NOT LIBREOFFICE_UNO_INCLUDE OR NOT EXISTS "${LIBREOFFICE_UNO_INCLUDE}")
     set(LIBREOFFICE_UNO_INCLUDE
-        "${CMAKE_CURRENT_LIST_DIR}/../../third_party/libreoffice"
+        "${CMAKE_CURRENT_LIST_DIR}/../third_party/libreoffice"
         CACHE PATH "Full UNO IDL header tree (com/sun/star/**)" FORCE)
 endif()
 
