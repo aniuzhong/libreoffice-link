@@ -1,6 +1,6 @@
 // attack_cb_reenter.cpp — 回调重入攻击
 // 在 cb_ 回调中调用各种 ABI 函数, 测试递归锁/死锁/崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <cstdio>

@@ -1,6 +1,6 @@
 // attack_exhaustion_probe.cpp — 资源耗尽攻击探针
 // 目标：耗尽系统资源导致卡死/崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

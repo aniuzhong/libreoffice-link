@@ -1,6 +1,6 @@
 // attack_state_corruption_probe.cpp — 状态机破坏攻击探针
 // 目标：破坏状态机导致卡死/崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

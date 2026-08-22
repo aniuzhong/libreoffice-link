@@ -1,6 +1,6 @@
 // static_race_probe.cpp — 复现静态变量竞态条件缺陷
 // 测试 calc_session.cpp 中 PushFrame() 的静态变量 sum_us/count 是否存在竞态
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

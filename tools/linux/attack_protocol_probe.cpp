@@ -1,7 +1,7 @@
 // attack_protocol_probe.cpp — 协议状态攻击探针（简化版）
 // 攻击点1: 暂停/恢复状态攻击（经验41：暂停→恢复翻页失效）
 // 攻击点2: Start幂等性攻击（经验42：Start未重置paused_）
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

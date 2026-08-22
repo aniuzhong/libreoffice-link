@@ -11,9 +11,9 @@
 #include <fstream>
 
 #include "md5.h"
-#include "../base/office_paths.h" // .office-link 路径统一 (header-only, 零依赖)
-#include "../base/link_utils.h"   // u2s/s2u/kFrameFormatBGRA/to_path/KernelHost (跨平台会话工具)
-#include "../base/log.h" // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
+#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
+#include <base/link_utils.h>   // u2s/s2u/kFrameFormatBGRA/to_path/KernelHost (跨平台会话工具)
+#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
 
 #include <osl/file.hxx>
 #include <com/sun/star/awt/Size.hpp>

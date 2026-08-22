@@ -19,7 +19,7 @@ set_target_properties(CalcLink PROPERTIES
 # abi (导出宏/守卫) + base (link_utils/log) + platform (LinkPlatform 实现) +
 # frame (FramePump); platform 链 OfficeRuntime -> DT_NEEDED=office_runtime.so
 # 运行时经 RUNPATH 解析, 经验 31
-target_link_libraries(CalcLink PRIVATE abi base platform frame)
+target_link_libraries(CalcLink PRIVATE link_include base platform)
 target_include_directories(CalcLink PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../runtime")
 target_compile_options(CalcLink PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_include_directories(CalcLink PRIVATE

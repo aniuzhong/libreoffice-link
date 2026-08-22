@@ -43,13 +43,15 @@ if(NOT WIN32)
     add_subdirectory(runtime)      # OfficeRuntime -> office_runtime.so (+ ffplay + 单测)
 endif()
 
-add_subdirectory(abi)        # C ABI 导出层 (header-only: LINK_API 宏/session_registry)
 add_subdirectory(base)       # 基础工具 (link_utils/log/office_paths)
 add_subdirectory(platform)   # 平台抽象 (LinkPlatform 接口/linux/xvfb + windows/win 实现)
-add_subdirectory(frame)      # 帧泵 (FramePump, 经验 42)
 add_subdirectory(calc)       # CalcLink      -> calclink.so
 add_subdirectory(impress)    # ImpressLink   -> impresslink.so
 add_subdirectory(writer)     # WriterLink    -> writerlink.so (自治 PDF 位图, 经验 38)
+
+# 统一 include 命名空间: 跨模块 include 用 <模块名/头名> (目录即命名空间, 零上溯)
+add_library(link_include INTERFACE)
+target_include_directories(link_include INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 option(BUILD_TOOLS "Build probes (Linux only, requires deploy done)" OFF)
 if(BUILD_TOOLS)

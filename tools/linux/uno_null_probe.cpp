@@ -1,6 +1,6 @@
 // uno_null_probe.cpp — 复现 UNO 对象未检查缺陷
 // 测试 calc_session.cpp 中 ScrollPage() 的 pane_ 空指针解引用问题
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

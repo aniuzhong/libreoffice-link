@@ -40,7 +40,7 @@
 | P7 | 性能三连: calc/writer 5ms 全速循环=200 唤醒/s; calc 每 5ms 一次 UNO 视口查询=200 IPC/s; impress 静止 25fps 全量重推≈208MB/s | tick 合并 (calc 200→50 唤醒/IPC); dedupe 待阶段5 |
 | P8 | impress width_/height_ 无同步写读 (泵线程写, GetWidth 读, 形式 UB) | — (迁移期未单独处理, FramePump 路径下宽高写主要在 Create/Start 阶段) |
 
-**FramePump 设计 (frame/frame_pump.h/.cpp):**
+**FramePump 设计 (base/frame_pump.h/.cpp):**
 - `FramePumpPlan { tick_ms, heartbeat_ms, heartbeat_when_paused, fail_backoff_ms }` — 每链一份 plan 数据, 差异降维
 - `frame_mutex_` 串行所有 FrameFn 执行 (泵 tick + UpdateFrame 调用方就地执行, 否决"单线程委托"方案: 引入唤醒延迟且 Stopped 态仍须回退就地执行)
 - `ctrl_mutex_` + condvar tick (Stop 可立即打断等待)

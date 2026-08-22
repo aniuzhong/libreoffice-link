@@ -35,16 +35,15 @@ target_link_libraries(WriterLink PRIVATE LibreOffice::Sdk)
 # 对偶 Linux 的 OfficeRuntime 角色) + frame (FramePump 实现, 对齐 Linux 链接).
 # 平台层不实例化 LinkPlatform, 仅取 win_office_log.obj (静态库按需取对象).
 if(WIN32)
-    target_link_libraries(WriterLink PRIVATE base platform frame)
+    target_link_libraries(WriterLink PRIVATE link_include base platform)
 endif()
 
 if(UNIX AND NOT APPLE)
     target_compile_definitions(WriterLink PRIVATE SAL_UNX UNX LINUX GCC)
     # 共享内核/BootLock/OfficeLog (Linux 专属; Windows 侧会话内 bootstrap)
     target_link_libraries(WriterLink PRIVATE OfficeRuntime)
-    # abi (导出守卫) + base (u2s/s2u/HideUiBlock/log 等; 与 calc/impress 对齐)
-    # + frame (FramePump)
-    target_link_libraries(WriterLink PRIVATE abi base frame)
+    # base (u2s/s2u/HideUiBlock/log + ABI 守卫 + FramePump; 与 calc/impress 对齐)
+    target_link_libraries(WriterLink PRIVATE link_include base)
     target_link_libraries(WriterLink PRIVATE
         -Wl,--allow-shlib-undefined
         -Wl,--export-dynamic

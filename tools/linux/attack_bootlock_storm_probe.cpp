@@ -2,7 +2,7 @@
 // 目标: 大量并发 Create 触发 BootLock 60s 超时 → 强制释放 → 不一致状态 → 崩溃
 // 已有 attack_race_probe 只用了 8 线程, 这里用 32+ 线程 + 交错 calc/impress/writer
 // 让 BootLock 信号量反复超时, 强制释放后遗留不一致 ctx → 后续操作崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

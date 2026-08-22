@@ -1,7 +1,7 @@
 // attack_cb_join_self.cpp — 回调中 Destroy 导致泵线程 join 自己
 // PushFrame 在 frame_mutex_ 内调 cb_, cb_ 里调 Destroy → pump_->Stop() → poll_thread_.join()
 // 当前线程就是 poll_thread_ → join 自己 → 崩溃或永久死锁
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <cstdio>

@@ -9,7 +9,7 @@
 #include <vector>
 
 #ifdef _WIN32
-#include "../base/link_utils.h" // link_utils::u2w (UTF-8 -> UTF-16, 中文路径)
+#include <base/link_utils.h> // link_utils::u2w (UTF-8 -> UTF-16, 中文路径)
 #endif
 
 namespace {

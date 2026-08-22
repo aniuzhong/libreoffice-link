@@ -2,7 +2,7 @@
 // 已覆盖：暂停/恢复状态（attack_protocol）、乱序调用（attack_state_corruption）。
 // 未覆盖：impress gotoSlideIndex 越界（负/超界）、stopped 态 goto、NextPage
 // 越过末尾、并发翻页；calc ScrollPage 在极端表/降序表下的越界。目标：崩溃/卡死 = 1 分。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

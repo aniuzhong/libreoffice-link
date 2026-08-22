@@ -1,6 +1,6 @@
 // attack_ultimate_storm_probe.cpp — 终极纯 ABI 风暴
 // 只调 C ABI 接口，不 fork、不删文件、不改信号量
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

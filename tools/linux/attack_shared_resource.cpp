@@ -1,6 +1,6 @@
 // attack_shared_resource.cpp — 共享资源耗尽攻击
 // 攻击 office_runtime 的跨进程资源: Xvfb 显示号、slot shm、BootLock 信号量
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <cstdio>
 #include <cstdlib>

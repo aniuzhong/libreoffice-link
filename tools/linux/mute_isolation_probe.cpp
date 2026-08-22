@@ -16,7 +16,7 @@
 // 跑前清场: 见 HANDOFF 1.4 (kill Xvfb + rm lock + rm /tmp/.X11-unix/X9*)
 // 素材: 必须绝对路径 (经验 46), 用带视频的 pptx (如 tools/data/AI时代.pptx)
 
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

@@ -1,6 +1,6 @@
 // attack_pure_abi_storm_probe.cpp — 纯 C ABI 接口暴力攻击
 // 不 fork、不删文件、不改信号量，只调 C ABI 接口
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

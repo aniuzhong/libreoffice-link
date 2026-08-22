@@ -3,7 +3,7 @@
 // （Destroy 进入中、或共享内核被其他会话 owner 退出连坐）后继续调 SetMute/翻页；
 // 以及大量会话并发创建触发共享内核 owner 退出连坐（HANDOFF 1.4 并行会话协作约定 (所有者退出连坐)）。
 // 目标：崩溃/卡死 = 1 分。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

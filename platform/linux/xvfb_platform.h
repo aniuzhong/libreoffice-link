@@ -6,8 +6,8 @@
 // 迁移自 calc/linux/calc_platform.cpp (原 calc/impress 两份 77% 重复的公共侧)。
 #pragma once
 
-#include "../link_platform.h"
-#include "../../runtime/runtime.h" // OfficeRuntime (Xvfb/内核/slot)
+#include <platform/link_platform.h>
+#include <runtime/runtime.h> // OfficeRuntime (Xvfb/内核/slot)
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>

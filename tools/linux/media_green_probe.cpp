@@ -4,7 +4,7 @@
 // 服务端背景子窗口)。不设变量时走 GStreamer 正常播放 (回归对照)。
 // 用法: media_green_probe <pptx> [每页等待ms=2500]
 // 判定: [FFPLAY] 日志 (内核 stderr 透传) + 每页绿色像素占比。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <cstdio>
 #include <cstdlib>

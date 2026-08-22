@@ -4,7 +4,7 @@
 // 攻击点3: 空指针/无效参数攻击
 // 攻击点4: 极端数值攻击（SetScale的10-400范围）
 // 攻击点5: 文件路径边界攻击（经验38：中文路径处理）
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

@@ -5,8 +5,8 @@
 // (Windows = %LOCALAPPDATA%\office-link\logs, 可 ORT_HOME 覆盖)。
 // ORT_LOG = both(默认)|file|stderr|off; ORT_LOG_LEVEL = debug|info(默认)|
 // warn|error — 双变量语义与 Linux spdlog 完全对齐。
-#include "../base/log.h"
-#include "../base/office_paths.h" // .office-link 路径统一 (基目录/子路径派生)
+#include <base/log.h>
+#include <base/office_paths.h> // .office-link 路径统一 (基目录/子路径派生)
 
 #ifdef _WIN32
 

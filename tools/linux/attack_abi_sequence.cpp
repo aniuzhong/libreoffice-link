@@ -1,6 +1,6 @@
 // attack_abi_sequence.cpp — C ABI 顺序破坏攻击
 // 单线程极端顺序调用, 测试每个 ABI 函数在异常状态下的行为
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <cstdio>
 #include <cstdlib>

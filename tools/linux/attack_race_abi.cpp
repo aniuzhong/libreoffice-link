@@ -1,7 +1,7 @@
 // attack_race_abi.cpp — C ABI 接口破坏比赛
 // 攻击向量: Start/Stop/Pause/Resume 高频交替 + 并发 Destroy
 // 原理: Destroy 的 close() 与 Start 的 resume() 并发, LO 内部 UNO 对象半销毁
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

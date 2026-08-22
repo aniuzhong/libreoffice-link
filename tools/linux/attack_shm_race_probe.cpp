@@ -3,7 +3,7 @@
 // 导致 use-after-free / 崩溃。SetWindowSize 触发 Ensure (XShmDetach+shmdt+shmctl),
 // 而 FramePump 线程持 frame_mutex_ 调 CaptureFrame 读同一 shm.img。
 // 两把锁不同 (mu_ vs frame_mutex_), 存在窗口期。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

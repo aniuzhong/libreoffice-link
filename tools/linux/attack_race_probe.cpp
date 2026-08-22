@@ -2,7 +2,7 @@
 // 攻击点1: 多线程同时Create会话（测试BootLock死锁，经验43）
 // 攻击点2: 多线程同时Start/Stop（测试FramePump竞态，经验42 P5）
 // 攻击点3: 多线程同时状态控制（测试锁纪律）
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

@@ -1,6 +1,6 @@
 // attack_combo_storm_probe.cpp — 组合风暴攻击
 // 把已知能卡死的攻击组合在一起，看能不能制造崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

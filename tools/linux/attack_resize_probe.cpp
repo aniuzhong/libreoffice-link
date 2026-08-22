@@ -2,7 +2,7 @@
 // 已覆盖：边界分辨率（attack_boundary）。未覆盖：运行期 SetResolution 与帧泵
 // CaptureFrame 的 XShm 段重建竞态、超大/0/负尺寸、连续高频 resize。
 // 目标：XShm 段撕裂 / 崩溃 / 卡死。每类 = 1 分。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

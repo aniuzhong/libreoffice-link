@@ -8,7 +8,7 @@
 // link_utils::BootstrapSession), 会话层统一调用, 无平台分支。
 #pragma once
 
-#include "../link_platform.h"
+#include <platform/link_platform.h>
 
 #include <cstdint>
 #include <string>

@@ -108,6 +108,7 @@ function(add_writer_tools NAME)
     target_compile_definitions(${NAME} PRIVATE ${TOOLS_DEFINES})
     target_link_libraries(${NAME} PRIVATE
         "${DEPLOY_DIR}/writerlink.so"
+        "${DEPLOY_DIR}/office_runtime.so"  # KernelHost 实现在 runtime (ld 不自动拉 DT_NEEDED)
         "${DEPLOY_DIR}/libstdc++.so.6"
         -Wl,-rpath,${DEPLOY_DIR})
 endfunction()

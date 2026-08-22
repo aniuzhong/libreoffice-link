@@ -7,7 +7,7 @@
 #include <string>
 #include <thread>
 
-#include "../abi/abi.h"
+#include <base/abi.h>
 #include "link_platform.h"
 #include "frame_pump.h"
 

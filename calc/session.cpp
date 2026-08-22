@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "link_utils.h" // u2s/s2u/HideUiBlock (公共会话工具, 经验 32 平台归组)
-#include "../base/log.h" // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
+#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
 
 #include <osl/file.hxx>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>

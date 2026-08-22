@@ -5,7 +5,7 @@
 //   (记录可达性; 预期: 导出器基础设施, render 的 xOptions 是导出选项, 无位图目标)
 // 用法: pdf_render_probe <doc> [A|B|both] [输出分辨率宽=1920]
 // 前置: office_runtime 无其他使用者; 素材如 ~/文档/戴奥良-简历.docx
-#include "runtime.h"
+#include <runtime/runtime.h>
 
 #include <chrono>
 #include <cstdio>

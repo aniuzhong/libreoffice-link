@@ -10,7 +10,7 @@
 // 唯一可能: Destroy 在 mu_ 外 Stop(pump), 但 Stop 要 join 泵线程。
 // 如果泵线程正在 PushFrame (持 frame_mutex_), PushFrame 里 cb_ 调了某个持 mu_ 的函数...
 // 而 Destroy 的线程持了 mu_ (在 Stop 之后) → 泵线程等 mu_, Destroy 线程等泵线程 join → 死锁
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <cstdio>

@@ -1,6 +1,6 @@
 // attack_fork_bomb_probe.cpp — fork 炸弹 + 共享内核破坏
 // fork 后子进程继承 UNO 引用，操作破坏父进程状态
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

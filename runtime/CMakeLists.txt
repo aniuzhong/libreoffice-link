@@ -3,7 +3,8 @@ get_filename_component(OR_DEPLOY_DIR "${LIBREOFFICE_SDK_ROOT}/.." ABSOLUTE)
 set(OR_DEPLOY_DIR "${OR_DEPLOY_DIR}/program")
 
 add_library(OfficeRuntime SHARED
-    runtime.cpp)
+    runtime.cpp
+    kernel_host.cpp)   # KernelHost Linux 实现 (G 缝; writer 引导缝, 声明在 base/link_utils.h)
 set_target_properties(OfficeRuntime PROPERTIES OUTPUT_NAME office_runtime PREFIX "")
 # 构建输出目录 = 部署目录 (office/program): 顶层全局输出目录 (bin 根) 会致
 # .so 双份存在, demo 的 LD_LIBRARY_PATH=$CURDIR 优先加载 bin 根版本 ->
@@ -13,7 +14,7 @@ set_target_properties(OfficeRuntime PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY_DEBUG "${OR_DEPLOY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${OR_DEPLOY_DIR}")
 
-target_link_libraries(OfficeRuntime PRIVATE LibreOffice::Sdk)
+target_link_libraries(OfficeRuntime PRIVATE LibreOffice::Sdk link_include)
 target_include_directories(OfficeRuntime PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libreoffice"
@@ -55,7 +56,7 @@ target_include_directories(runtime_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libreoffice"
     "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
-target_link_libraries(runtime_test PRIVATE OfficeRuntime)
+target_link_libraries(runtime_test PRIVATE link_include OfficeRuntime)
 target_link_libraries(runtime_test PRIVATE LibreOffice::Sdk) # UNO 头 + CPPU_ENV
 target_compile_definitions(runtime_test PRIVATE SAL_UNX UNX LINUX GCC)
 target_link_libraries(runtime_test PRIVATE

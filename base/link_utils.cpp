@@ -15,15 +15,6 @@
 #include <chrono>
 #include <thread>
 
-#ifdef _WIN32
-#include <windows.h>
-#include <cppuhelper/bootstrap.hxx>
-#else
-#include "../runtime/runtime.h" // KernelHost Linux 实现 (G 缝)
-#include <cstdlib> // setenv
-#endif
-
-#include "office_paths.h" // KernelHost Windows profile 路径 (G 缝)
 
 #include <filesystem>
 
@@ -258,103 +249,5 @@ std::filesystem::path to_path(const std::string& utf8) {
 #endif
 }
 
-// ---- KernelHost (G 缝, design-platform-isolation.md Part 2 G) ----
-// writer 无 LinkPlatform 层, 引导缝收进本工具。双平台各一 Impl (机制安居)。
-struct KernelHost::Impl {
-    std::string profile_subdir;
-    std::string guid;
-#ifdef _WIN32
-    std::string profile; // Windows: per-session profile 目录
-#else
-    bool acquired = false;          // Linux: OfficeRuntime::Acquire 引用计数
-    std::unique_ptr<OfficeRuntime::BootLock> boot_lock; // Linux: 串行化引导+加载
-#endif
-};
-
-KernelHost::KernelHost(const char* profile_subdir, const char* guid)
-    : impl_(std::make_unique<Impl>()) {
-    impl_->profile_subdir = profile_subdir ? profile_subdir : "";
-    impl_->guid = guid ? guid : "";
-#ifdef _WIN32
-    // Windows: per-session profile 目录 (writer 离屏管线, 桌面名空)
-    impl_->profile = office_paths::desktop_profile(impl_->profile_subdir, impl_->guid);
-    std::error_code ec;
-    std::filesystem::create_directories(to_path(impl_->profile), ec);
-#else
-    // Linux: 共享运行时 (Xvfb+内核) Acquire; writer 无窗口但内核进程 VCL 需 X。
-    // 不 AllocSlot (无窗口/无抓帧)。同进程已有 calc/impress 会话则直接复用。
-    OfficeRuntimeConfig cfg; // 默认值见 runtime.h (max_docs=8, 3840×2160)
-    impl_->acquired = OfficeRuntime::Instance().Acquire(cfg);
-    if (!impl_->acquired) {
-        OfficeLogErr("[KernelHost] Acquire failed");
-    }
-#endif
-}
-
-KernelHost::~KernelHost() {
-#ifdef _WIN32
-    // Windows: 独立 soffice 进程, terminate 由会话层 (ShouldTerminateOnDestroy 门控);
-    // profile 目录随 soffice 进程退出遗留 (下次 fresh), 无显式清理。
-#else
-    // Linux: Release 共享运行时引用 (末个 session 释放 Xvfb+内核)
-    impl_->boot_lock.reset(); // 确保释放 (若未 Release)
-    if (impl_->acquired) {
-        OfficeRuntime::Instance().Release();
-        impl_->acquired = false;
-    }
-#endif
-}
-
-void KernelHost::BeginBoot() {
-#ifdef _WIN32
-    // Windows: 每 session 独立 soffice 进程, 无共享内核串行需求 (经验 5 不适用)
-#else
-    if (!impl_->acquired)
-        return;
-    impl_->boot_lock = std::make_unique<OfficeRuntime::BootLock>();
-    OfficeLog("[KernelHost] boot lock acquired");
-#endif
-}
-
-void KernelHost::Release() {
-#ifdef _WIN32
-    // Windows: 无引导锁
-#else
-    if (impl_->boot_lock) {
-        impl_->boot_lock->Unlock(); // 引导+加载完成, 窗口查找可并行 (经验 5)
-        impl_->boot_lock.reset();
-        OfficeLog("[KernelHost] boot lock released");
-    }
-#endif
-}
-
-css::uno::Reference<css::uno::XComponentContext> KernelHost::ObtainCtx() {
-#ifdef _WIN32
-    // Windows: 每 session 独立 soffice 三参 bootstrap (空桌面名, writer 离屏)
-    auto ctx = BootstrapSession(GetLinkDir(), impl_->profile, "");
-    if (!ctx.is())
-        OfficeLogErr("[KernelHost] BootstrapSession failed");
-    return ctx;
-#else
-    if (!impl_->acquired)
-        return nullptr;
-    if (!OfficeRuntime::Instance().EnsureKernel()) {
-        OfficeLogErr("[KernelHost] EnsureKernel failed");
-        return nullptr;
-    }
-    // LANG: LO type detection 依赖 locale (env -i 类环境会 type detection
-    // failed, 经验 25 陷阱; 不覆盖已有值)
-    setenv("LANG", "zh_CN.UTF-8", 0);
-    return OfficeRuntime::Instance().kernel();
-#endif
-}
-
-bool KernelHost::ShouldTerminateOnDestroy() const {
-#ifdef _WIN32
-    return true;  // Windows: 每 session 独立 soffice 进程须 terminate 退出
-#else
-    return false; // Linux: 共享内核, 不 terminate
-#endif
-}
 
 }  // namespace link_utils

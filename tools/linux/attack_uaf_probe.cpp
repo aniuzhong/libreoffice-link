@@ -2,7 +2,7 @@
 // 已存在的 7 个攻击探针未覆盖：销毁与会话内部帧泵/平台资源的竞态窗口、
 // NULL/重复 Destroy、销毁后继续调用 API。
 // 目标：制造 use-after-free / double-free / 崩溃。每类崩溃或卡死 = 1 分。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

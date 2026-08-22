@@ -1,6 +1,6 @@
 // attack_deadlock_probe.cpp — 卡死/崩溃专用攻击探针
 // 目标：让程序卡死或崩溃，不计资源使用
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

@@ -7,9 +7,9 @@
 #include <string>
 
 
-#include "../abi/abi.h"
+#include <base/abi.h>
 #include "link_platform.h"
-#include "../frame/frame_pump.h"  // 阶段4: 统一帧泵 (替代 poll_thread_/paused_/force_frame_)
+#include <base/frame_pump.h>  // 阶段4: 统一帧泵 (替代 poll_thread_/paused_/force_frame_)
 
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>

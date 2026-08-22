@@ -1,7 +1,7 @@
 // impress_nextpage_probe.cpp — 卡死问题复现探针:
 // Create -> Start -> 循环 NextPage x20, 每步计时 gotoNextEffect 调用耗时 /
 // 抓帧耗时, 定位卡点 (UNO 侧 vs 显示侧 vs 锁)。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

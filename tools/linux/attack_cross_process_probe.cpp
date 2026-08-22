@@ -1,6 +1,6 @@
 // attack_cross_process_probe.cpp — 跨进程协调攻击探针
 // 目标：破坏跨进程协调机制导致卡死/崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

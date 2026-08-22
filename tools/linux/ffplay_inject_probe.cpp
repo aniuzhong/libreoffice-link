@@ -3,7 +3,7 @@
 // -> createPlayer(url) -> 打印结果。绿色视频 = 壳的 GreenPlayer 渲染 (注入成功判据)。
 // 用法: ffplay_inject_probe [media_url]
 // 前提: unorc 已追加 ffplay.rdb; ffplay.so 在 office/program。
-#include "runtime.h"
+#include <runtime/runtime.h>
 
 #include <cstdio>
 #include <cstdlib>

@@ -4,7 +4,7 @@
 //   线程C ImpressSessionCreate(pptx)
 // 验证: 并发创建不死锁 / 三路帧都流动且含内容 / slot 窗口互不重叠 /
 //       impress 翻页生效 / 干净销毁。
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <cstdint>
 #include <cstdio>

@@ -3,7 +3,7 @@
 // 用法: ./ui_1px_probe <xlsx1> <xlsx2> <pptx>
 // 输出: /tmp/ui_1px_{calc1,calc2,impress}.bmp + 底部行像素摘要
 // 后续: 用 ffmpeg 精确对比 impress 底部行与 calc 帧的相似度
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <cstdint>
 #include <cstdio>

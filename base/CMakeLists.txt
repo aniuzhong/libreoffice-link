@@ -1,13 +1,15 @@
-# 基础工具层 (STATIC): 跨平台会话工具 (u2s/s2u/HideUiBlock/FrameFormat 常量) +
-# OfficeLog 声明 (log.h) + .office-link 路径命名空间 (office_paths.h)。
-# 零依赖 runtime/office_runtime; Windows 平台同样链入 (win_office_log 实现 Log)。
-add_library(base STATIC link_utils.cpp)
+# 共享基础层 (STATIC): 跨平台会话工具 (link_utils/log/office_paths) +
+# 统一 C ABI 声明 (abi.h/session_registry.h) + 帧泵 (frame_pump)。
+# 零项目依赖 (仅 LibreOffice::Sdk); Windows 平台同样链入。
+add_library(base STATIC
+    link_utils.cpp
+    frame_pump.cpp)
 target_include_directories(base PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(base PUBLIC LibreOffice::Sdk)
+target_link_libraries(base PUBLIC LibreOffice::Sdk link_include)
 
 if(UNIX AND NOT APPLE)
     target_compile_definitions(base PUBLIC SAL_UNX UNX LINUX GCC)
-    # link_utils 的 KernelHost (G 缝) Linux 实现依赖 runtime (引导/BootLock);
-    # PUBLIC 保持与旧 common 相同的链接图 (common -> OfficeRuntime 传递)
-    target_link_libraries(base PUBLIC OfficeRuntime)
+    # FramePump 单测 (树内编译不部署)
+    add_executable(frame_pump_test frame_pump_test.cpp)
+    target_link_libraries(frame_pump_test PRIVATE base Threads::Threads)
 endif()

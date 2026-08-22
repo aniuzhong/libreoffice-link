@@ -1,6 +1,6 @@
 // shm_leak_probe.cpp — 复现 X11 共享内存段泄漏缺陷
 // 测试 xvfb_platform.cpp 中 ShmState::Release() 是否存在共享内存段泄漏
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

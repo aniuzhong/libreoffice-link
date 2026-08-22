@@ -5,7 +5,7 @@
 //   Xvfb 生命周期 (启动/显示号/回收)           <- linux/calc_platform.cpp
 //   Slot 分区 (alloc/free/位图)              <- linux/calc_platform.cpp
 #include "runtime.h"
-#include "../base/office_paths.h" // .office-link 路径统一 (header-only, 零依赖)
+#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
 #include "../third_party/scope_guard.hpp" // DEFER: C 资源清理 (XCloseDisplay/munmap/close)
 
 #include <dlfcn.h>

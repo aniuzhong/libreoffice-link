@@ -1,7 +1,7 @@
 # NovaLibreOfficePlayer 交接文档
 
 > 新会话起点:先读本文件,再按"三、规划"推进。
-> 代码在 `NovaLibreOfficePlayer/`(calc/impress/writer + abi/base/platform/frame + runtime 含 ffplay)+ 上层 `NovaOfficeCore/`(dlopen links)。
+> 代码在 `NovaLibreOfficePlayer/`(calc/impress/writer + base/platform + runtime 含 ffplay)+ 上层 `NovaOfficeCore/`(dlopen links)。
 > 经验编号被代码注释引用,**编号只增不改**;每次认知提升更新"二、经验"(带时间+置信度),完成事项移入"一、现状"。
 >
 > **分层阅读 (2026-08-20 重构)**: 本文件 = Core(每次必读: 现状/沙箱运行策略/经验索引/漏洞/待办);
@@ -33,26 +33,26 @@
 ```
 NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: OfficeRuntime/
   │                        CalcLink/ImpressLink/FFplay/WriterLink)
-  ├── abi/                 C ABI 导出层 (header-only)
-  │     abi.h             LINK_API 导出宏 + 统一 C ABI 接口声明 (三 link 全部
-  │                        API + 共享回调类型 + ABI 契约)
-  │     session_registry.h  ABI 入口守卫 (V4: SessionRegistry/Guard/AbiCall)
-  ├── base/                基础工具 (零依赖 runtime)
+  ├── base/                共享基础层 (STATIC, 零项目依赖; 双平台)
   │     link_utils.h/.cpp u2s/s2u/u2w(Windows UTF-8→UTF-16)+ kFrameFormatBGRA/
   │                        kDefaultWidth/Height 常量 + UNO_GUARD/UNO_SILENT 宏 +
-  │                        HideUiBlock UI 隐藏三件套 + DumpUiState 自省
+  │                        HideUiBlock UI 隐藏三件套 + DumpUiState 自省 + to_path
   │     log.h             OfficeLog 声明 (实现唯一在 office_runtime.so, 勿编第二份)
   │     office_paths.h    .office-link 路径命名空间
-  │     cmake/FindLibreOfficeSDK.cmake  SDK 查找 (缓存自愈)
-  ├── platform/            平台抽象
+  │     abi.h             LINK_API 导出宏 + 统一 C ABI 接口声明 (三 link 全部
+  │                        API + 共享回调类型 + ABI 契约; 原 abi/ 并入)
+  │     session_registry.h  ABI 入口守卫 (V4: SessionRegistry/Guard/AbiCall)
+  │     frame_pump.h/.cpp FramePump 统一帧泵 (经验 42, 三链接入; 原 frame/ 并入)
+  ├── platform/            平台抽象 (STATIC, 双平台; 平台差异的家, 3.3 三原则)
   │     link_platform.h   LinkPlatform 统一平台接口 (工厂: CreateCalc/ImpressPlatform)
   │     linux/xvfb_platform.*  XvfbSessionPlatform 单类参数化 (抓帧/slot/落位)
   │     linux/linux_platforms.cpp  工厂 (匹配规则即文档类型差异, 各 2 行)
   │     windows/win_platform.*  WindowsPlatform (CreateDesktop 独立进程模式; 平台隔离
   │                               新接口 Plan/BootSection 等, calc/impress 共用, 经验 39/44)
-  ├── frame/               帧泵 (FramePump, 经验 42 三链接入)
-  ├── runtime/             OfficeRuntime → office_runtime.so — 进程级共享运行时 (Linux)
+  │     windows/kernel_host.cpp  KernelHost Windows 实现 (G 缝; 自 base 拆入)
+  ├── runtime/             OfficeRuntime → office_runtime.so — 进程级共享运行时 (Linux 专属)
   │     Xvfb 大屏/LO 共享内核/slot shm/跨进程 BootLock/孤儿清场/BootLock/诊断
+  │     kernel_host.cpp    KernelHost Linux 实现 (G 缝; 自 base 拆入, writer 引导缝)
   │     runtime_test.cpp — 单测 (9 场景 50 检查, --stress N; 可执行名 office_runtime_test)
   │     ffplay/            FFplay → ffplay.so — 自治媒体后端 (Manager_FFPlay;
   │                         嵌入引擎 = 定制 ffplay.c 补丁式复用, compat/)
@@ -60,7 +60,9 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Off
   ├── impress/             ImpressLink → impresslink.so (同上)
   └── writer/              WriterLink → writerlink.so (自治 PDF 位图管线, 经验 38: 无平台层, 页表 = Draw XDrawPages)
   third_party/             外部依赖: libreoffice/ (LO SDK UNO 头) + spdlog/ + scope_guard.hpp
-  注: 三 link 接口统一声明在 abi/abi.h (调用方 dlopen 动态加载, 无独立接口头)
+  注1: 三 link 接口统一声明在 base/abi.h (调用方 dlopen 动态加载, 无独立接口头)
+  注2: 跨模块 include 统一 <模块名/头名> (根 link_include INTERFACE 提供 -I, 零上溯;
+       依赖方向: base ← runtime ← platform ← links, 全单向无环)
 ```
 
 - **共享内核模式 (Linux)**:进程内一个 LO 内核(自研 `BootstrapOffice` 引导,复制官方 cppu::bootstrap 逻辑,独立 profile `~/.office-link/xvfb`,2026-08-18 由 `player/` 更名,见经验 40)+ 一个 Xvfb 大屏(默认 `8×3840×2160 = 30720x2160`,8 个 2160p 子屏位),多文档窗口动态落位互不重叠。调用者只需知道最大并发数 + 每文档最大分辨率。Windows 为每 session 独立 soffice + 独立桌面,不参与本模块。
@@ -166,8 +168,8 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 - `third_party/scope_guard.hpp` — 第三方库(Neargye/scope_guard 0.9.4,MIT),提供 `DEFER` 宏用于 C 资源清理(XCloseDisplay/munmap/close);runtime.cpp 使用
 - `runtime/ffplay/compat/` — `ffplay.c`(上游 diff=0)+ `ffplay_embed.c`(= ffplay.c + `ffplay_embed.patch`)+ `ffplay_engine.h` 引擎 C API + 手写 `config.h`
 - `platform/linux/xvfb_platform.cpp` — XShm 抓帧 + BGRX 字节序直拷 + 窗口扫描/落位
-- `frame/frame_pump.h/.cpp` — FramePump 统一帧泵 (经验 42, 三链接入)
-- `calc|impress|writer/session.*` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 窗口化放映 + gotoNextEffect 翻页);`export.cpp` 为 C ABI 转发层 (原 *link.cpp), 接口声明在 `abi/abi.h`
+- `base/frame_pump.h/.cpp` — FramePump 统一帧泵 (经验 42, 三链接入; 原 frame/ 并入 base)
+- `calc|impress|writer/session.*` — 会话(加载/控制/轮询;calc 滚动/切表/缩放,impress XPresentation2 窗口化放映 + gotoNextEffect 翻页);`export.cpp` 为 C ABI 转发层 (原 *link.cpp), 接口声明在 `base/abi.h`
 - `tools/CMakeLists.txt` — 探针编译 (CMake 子模块, `-DBUILD_TOOLS=ON`; 源码在 `tools/linux/`, 素材在 `tools/data/`)
 
 ### 1.7 当前状态与注意事项

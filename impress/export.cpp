@@ -10,13 +10,13 @@
 // ABI 异常边界 (V4 入口守卫第二要素): 所有导出函数体经 AbiCall 包裹,
 // C++ 异常不得逃逸 C ABI (逃逸 → std::terminate → SIGABRT, calclink
 // attack_uaf_probe UAF-1 同类实证)。
-#include "../abi/abi.h"
+#include <base/abi.h>
 
 #include <cstdlib>
 
 #include "session.h"
-#include "../base/log.h" // OfficeLog (诊断: C ABI 边界调用追踪)
-#include "../abi/session_registry.h"  // V4: ABI 入口守卫 + AbiCall 异常边界
+#include <base/log.h> // OfficeLog (诊断: C ABI 边界调用追踪)
+#include <base/session_registry.h>  // V4: ABI 入口守卫 + AbiCall 异常边界
 
 namespace {
 SessionRegistry g_registry;

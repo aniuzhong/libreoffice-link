@@ -114,7 +114,7 @@
 // V20: 并发 Create 与 Destroy 的 BootLock 信号量混乱
 //     32+ 线程并发 Create，BootLock 60s 超时强制释放后，
 //     遗留不一致 ctx_ → 后续操作崩溃
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

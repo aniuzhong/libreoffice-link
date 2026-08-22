@@ -2,7 +2,7 @@
 // 验证: Create (docx→PDF→Draw 导入→首页渲染) / 翻页 (同步渲染+推帧) /
 //   GoToPage / 帧内容 (非白%) / 缓存命中 (NPOfficeCache 复用 vs 自转)。
 // 用法: writer_probe <doc> [翻页数=5]
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>

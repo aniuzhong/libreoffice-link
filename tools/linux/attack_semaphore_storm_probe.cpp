@@ -1,6 +1,6 @@
 // attack_semaphore_storm_probe.cpp — 信号量/共享内存破坏攻击
 // 直接操作 /dev/shm 下的信号量和 slot 文件，制造跨进程混乱
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <atomic>
 #include <chrono>

@@ -1,7 +1,7 @@
 // minimal_load_probe.cpp — 最简 URP 远程 loadComponentFromURL 验证
 // 对比 soffice --convert-to (进程内) vs URP 远程调用。
 // 用法: minimal_load_probe <file_path>
-#include "runtime.h"
+#include <runtime/runtime.h>
 
 #include <cstdio>
 #include <cstring>

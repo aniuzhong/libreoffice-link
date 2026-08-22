@@ -1,7 +1,7 @@
 // attack_resource_probe.cpp — 资源管理攻击探针（简化版）
 // 攻击点1: 快速创建销毁会话（测试资源泄漏，经验35 Xvfb垂死窗口竞态）
 // 攻击点2: 内存泄漏攻击（大量会话不销毁）
-#include <abi/abi.h>
+#include <base/abi.h>
 
 #include <chrono>
 #include <cstdio>
