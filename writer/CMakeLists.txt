@@ -31,10 +31,11 @@ target_include_directories(WriterLink PRIVATE
 # UNO 头 + CPPU_ENV 宏 (Windows 侧同样需要)
 target_link_libraries(WriterLink PRIVATE LibreOffice::Sdk)
 
-# Windows: base 共享工具 (OfficeLog/GetLinkDir/BootstrapSession;
-# 平台层不实例化, 见文件头注释)
+# Windows: base 共享工具 + platform 提供 OfficeLog 实现 (win_office_log.cpp,
+# 对偶 Linux 的 OfficeRuntime 角色) + frame (FramePump 实现, 对齐 Linux 链接).
+# 平台层不实例化 LinkPlatform, 仅取 win_office_log.obj (静态库按需取对象).
 if(WIN32)
-    target_link_libraries(WriterLink PRIVATE base)
+    target_link_libraries(WriterLink PRIVATE base platform frame)
 endif()
 
 if(UNIX AND NOT APPLE)

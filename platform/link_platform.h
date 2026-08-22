@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <vector>
 
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
