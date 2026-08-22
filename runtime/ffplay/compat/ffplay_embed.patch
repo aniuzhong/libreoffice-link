@@ -1,0 +1,404 @@
+--- ffplay.c	2026-08-14 15:28:11.569384057 +0800
++++ ffplay_embed.c	2026-08-19 18:36:45.097345900 +0800
+@@ -242,6 +242,7 @@
+     AVStream *audio_st;
+     PacketQueue audioq;
+     int audio_hw_buf_size;
++    SDL_AudioDeviceID audio_dev; /* 多实例根治: 每实例独立音频设备 (下沉自全局, 详见 HANDOFF 六、ffplay 媒体后端/多实例根治) */
+     uint8_t *audio_buf;
+     uint8_t *audio_buf1;
+     unsigned int audio_buf_size; /* in bytes */
+@@ -305,6 +306,13 @@
+     int last_video_stream, last_audio_stream, last_subtitle_stream;
+ 
+     SDL_cond *continue_read_thread;
++#ifdef FFPLAY_EMBED
++    /* 嵌入模式: per-instance 窗口/渲染器/泵线程 (ffplay_embed.patch) */
++    SDL_Window *window;
++    SDL_Renderer *renderer;
++    SDL_RendererInfo renderer_info;
++    SDL_Thread *pump_tid;
++#endif
+ } VideoState;
+ 
+ /* options specified by the user */
+@@ -366,7 +374,10 @@
+ static SDL_Window *window;
+ static SDL_Renderer *renderer;
+ static SDL_RendererInfo renderer_info = {0};
+-static SDL_AudioDeviceID audio_dev;
++#ifdef FFPLAY_EMBED
++static SDL_mutex *render_mutex; /* 多实例根治: 串行 video_display 全局渲染上下文 (window/renderer 仅活跃实例有效, 受此锁保护, 详见 HANDOFF 六、ffplay 媒体后端/多实例根治) */
++static void *ffplay_embed_parent_window = NULL; /* 引擎 create 时设定 */
++#endif
+ 
+ static const struct TextureFormatEntry {
+     enum AVPixelFormat format;
+@@ -1226,7 +1237,7 @@
+     switch (codecpar->codec_type) {
+     case AVMEDIA_TYPE_AUDIO:
+         decoder_abort(&is->auddec, &is->sampq);
+-        SDL_CloseAudioDevice(audio_dev);
++        SDL_CloseAudioDevice(is->audio_dev);
+         decoder_destroy(&is->auddec);
+         swr_free(&is->swr_ctx);
+         av_freep(&is->audio_buf1);
+@@ -1305,6 +1316,17 @@
+         SDL_DestroyTexture(is->vid_texture);
+     if (is->sub_texture)
+         SDL_DestroyTexture(is->sub_texture);
++#ifdef FFPLAY_EMBED
++    /* 多实例根治: 销毁本实例渲染资源 (原 do_exit 销毁全局, 会误删最后渲染的其他实例) */
++    if (is->renderer) {
++        SDL_DestroyRenderer(is->renderer);
++        is->renderer = NULL;
++    }
++    if (is->window) {
++        SDL_DestroyWindow(is->window);
++        is->window = NULL;
++    }
++#endif
+     av_free(is);
+ }
+ 
+@@ -1313,10 +1335,13 @@
+     if (is) {
+         stream_close(is);
+     }
++#ifndef FFPLAY_EMBED
++    /* 非嵌入 CLI: 单实例, 销毁全局窗口/渲染器。嵌入模式由 stream_close 销毁每实例资源, 不碰全局 (多实例根治) */
+     if (renderer)
+         SDL_DestroyRenderer(renderer);
+     if (window)
+         SDL_DestroyWindow(window);
++#endif
+     uninit_opts();
+ #if CONFIG_AVFILTER
+     av_freep(&vfilters_list);
+@@ -1324,9 +1349,15 @@
+     avformat_network_deinit();
+     if (show_status)
+         printf("\n");
++#ifdef FFPLAY_EMBED
++    /* 嵌入模式: 不退出进程, SDL_Quit 由引擎末实例统一处理 */
++#else
+     SDL_Quit();
++#endif
+     av_log(NULL, AV_LOG_QUIET, "%s", "");
++#ifndef FFPLAY_EMBED
+     exit(0);
++#endif
+ }
+ 
+ static void sigterm_handler(int sig)
+@@ -1353,7 +1384,37 @@
+     w = screen_width ? screen_width : default_width;
+     h = screen_height ? screen_height : default_height;
+ 
+-    if (!window_title)
++#ifdef FFPLAY_EMBED
++    /* 嵌入模式: 窗口由引擎 create 指定外部句柄, 首次 video_open 创建;
++       全局 window/renderer 同步为当前实例 (渲染入口亦同步, 见 video_display) */
++    if (!is->window) {
++        is->window = SDL_CreateWindowFrom(ffplay_embed_parent_window);
++        if (is->window) {
++            /* 强制软件渲染: Xvfb 恒无 GPU (经验 19b 哲学)。flags=0 时 SDL
++               驱动顺序 OpenGL 优先, Xvfb 带 mesa 软件 GLX 时双实例双线程
++               swrast 渲染崩 soffice.bin (2026-08-17 dual_media.pptx 实测,
++               栈 swrast_dri←GLX_mesa←SDL2←ffplay) */
++            is->renderer = SDL_CreateRenderer(is->window, -1, SDL_RENDERER_SOFTWARE);
++            if (is->renderer)
++                SDL_GetRendererInfo(is->renderer, &is->renderer_info);
++            /* video_open 诊断: av_log 经 AvLogToSpdlog callback 自动落盘 ffplay_<pid>.log
++               (ffplay_log.h 注册的 callback; 不再 fprintf stderr 直输) */
++            av_log(NULL, AV_LOG_INFO, "[FFPLAY] video_open: window=%p renderer=%p backend=%s\n",
++                    (void*)is->window, (void*)is->renderer,
++                    is->renderer ? is->renderer_info.name : "(null)");
++        }
++        if (!is->window || !is->renderer || !is->renderer_info.num_texture_formats) {
++            av_log(NULL, AV_LOG_FATAL, "Failed to create window or renderer: %s", SDL_GetError());
++            return -1;
++        }
++        window = is->window;
++        renderer = is->renderer;
++        /* 方案A修复: 用 SDL_GetWindowSize 读取外部 X11 窗口实际尺寸, 替代
++           default_width/height (640x480) 硬编码。SDL X11 驱动 SetupWindowData
++           用 XGetWindowAttributes 设置 window->w/h, 故返回值 = X11 窗口真实尺寸。
++           局限: 仅首次创建; 运行时 X11 resize 不感知 (SDL 缓存不自动更新),
++           列为开放问题 (放映期媒体窗口尺寸通常固定) */
++        SDL_GetWindowSize(is->window, &w, &h);
++    }
++#else
+         window_title = input_filename;
+     SDL_SetWindowTitle(window, window_title);
+ 
+@@ -1363,6 +1424,7 @@
+         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+     SDL_ShowWindow(window);
+ 
++#endif
+     is->width  = w;
+     is->height = h;
+ 
+@@ -1372,6 +1434,15 @@
+ /* display the current picture, if any */
+ static void video_display(VideoState *is)
+ {
++#ifdef FFPLAY_EMBED
++    /* 多实例根治: 串行全局渲染上下文 (window/renderer 仅活跃实例有效, 受 render_mutex 保护)。
++       video_open 亦在此临界区内 (仅由本函数调用), 所有全局 renderer 读位 (RenderClear/Copy/Present
++       + image/audio display helpers) 均在调用树内, 一把锁覆盖整个全局访问面。
++       软件渲染本就单 CPU, 串行无并发损失 (经验 19b/37)。详见 HANDOFF 六、ffplay 媒体后端/多实例根治 */
++    SDL_LockMutex(render_mutex);
++    window = is->window;
++    renderer = is->renderer;
++#endif
+     if (!is->width)
+         video_open(is);
+ 
+@@ -1382,6 +1453,9 @@
+     else if (is->video_st)
+         video_image_display(is);
+     SDL_RenderPresent(renderer);
++#ifdef FFPLAY_EMBED
++    SDL_UnlockMutex(render_mutex);
++#endif
+ }
+ 
+ static double get_clock(Clock *c)
+@@ -2513,6 +2587,7 @@
+ 
+ static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate, struct AudioParams *audio_hw_params)
+ {
++    VideoState *is = opaque; /* 多实例根治: audio_dev 下沉至实例 (原全局被多实例覆盖/误关) */
+     SDL_AudioSpec wanted_spec, spec;
+     const char *env;
+     static const int next_nb_channels[] = {0, 0, 1, 6, 2, 6, 4, 6};
+@@ -2542,7 +2617,7 @@
+     wanted_spec.samples = FFMAX(SDL_AUDIO_MIN_BUFFER_SIZE, 2 << av_log2(wanted_spec.freq / SDL_AUDIO_MAX_CALLBACKS_PER_SEC));
+     wanted_spec.callback = sdl_audio_callback;
+     wanted_spec.userdata = opaque;
+-    while (!(audio_dev = SDL_OpenAudioDevice(NULL, 0, &wanted_spec, &spec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE))) {
++    while (!(is->audio_dev = SDL_OpenAudioDevice(NULL, 0, &wanted_spec, &spec, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE))) {
+         av_log(NULL, AV_LOG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s\n",
+                wanted_spec.channels, wanted_spec.freq, SDL_GetError());
+         wanted_spec.channels = next_nb_channels[FFMIN(7, wanted_spec.channels)];
+@@ -2704,7 +2779,7 @@
+         }
+         if ((ret = decoder_start(&is->auddec, audio_thread, "audio_decoder", is)) < 0)
+             goto out;
+-        SDL_PauseAudioDevice(audio_dev, 0);
++        SDL_PauseAudioDevice(is->audio_dev, 0);
+         break;
+     case AVMEDIA_TYPE_VIDEO:
+         is->video_stream = stream_index;
+@@ -3704,8 +3779,16 @@
+ }
+ 
+ /* Called from the main */
++#ifdef FFPLAY_EMBED
++#define main ffplay_engine_standalone_main /* 嵌入模式: 主入口由引擎 API 提供 */
++#endif
+ int main(int argc, char **argv)
+ {
++#ifdef FFPLAY_EMBED
++    /* 嵌入模式: main 不执行 (由 ffplay_engine_* API 驱动) */
++    (void)argc; (void)argv;
++    return 0;
++#else
+     int flags;
+     VideoState *is;
+ 
+@@ -3802,4 +3885,191 @@
+     /* never returns */
+ 
+     return 0;
++#endif
++}
++
++#ifdef FFPLAY_EMBED
++/* ================= 嵌入引擎 API (ffplay_embed.patch 新增, 非上游) =================
++ * 目标: 复用 ffplay 全部播放能力 (解码/同步/音频/seek), 提供最小嵌入接口。
++ * 控制语义与 LO avmedia XPlayer 对齐 (start/stop/pause/seek/volume/loop)。
++ * 多实例: 每实例独立 VideoState (window/renderer per-instance);
++ *         渲染入口 (video_display) 同步全局句柄, 各实例渲染线程互不干扰。
++ * 刷新机制: 复刻 refresh_loop_wait_event 轮询语义 (定制版无 FF_REFRESH_EVENT)。
++ */
++static int ffplay_engine_pump_thread(void *arg)
++{
++    VideoState *is = arg;
++    while (!is->abort_request) {
++        SDL_Event event;
++        SDL_PumpEvents();
++        if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT)) {
++            if (event.type == SDL_QUIT)
++                is->abort_request = 1;
++            continue;
++        }
++        double remaining_time = 0.0;
++        if (is->show_mode != SHOW_MODE_NONE && (!is->paused || is->force_refresh))
++            video_refresh(is, &remaining_time);
++        if (remaining_time > 0.0)
++            av_usleep((int64_t)(remaining_time * 1000000.0));
++        else
++            SDL_Delay(1);
++    }
++    return 0;
++}
++
++void *ffplay_engine_create(const char *url, void *parent_window)
++{
++    /* 全局默认值 (与官方 ffplay 默认一致; 选项在嵌入模式固定) */
++    loop = 1;
++    autoexit = 0;
++    show_status = 0;
++    startup_volume = 100;
++    av_sync_type = AV_SYNC_AUDIO_MASTER;
++    framedrop = -1;
++    infinite_buffer = -1;
++    lowres = 0;
++    genpts = 0;
++    find_stream_info = 1;
++
++    if (!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
++        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
++            av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
++            return NULL;
++        }
++        /* 多实例根治: 进程级渲染锁, 随 SDL 首次 init 创建一次 (创建串行由 BootLock/500ms 错峰保证, 经验 37 ④) */
++        render_mutex = SDL_CreateMutex();
++    }
++    /* 禁用 SDL 窗口 framebuffer 的 GL 加速 fallback: SW 软件渲染器的
++       present 链 (SW_RenderPresent → SDL_UpdateWindowSurface →
++       SDL_CreateWindowFramebuffer) 默认尝试 texture framebuffer —— 内部
++       循环显式跳过 software 驱动、只找 ACCELERATED 渲染器 (SDL_video.c
++       ShouldAttemptTextureFramebuffer / SDL_CreateWindowTexture, 不读
++       SDL_HINT_RENDER_DRIVER), Xvfb 的 mesa 软件 GLX 下创建 swrast 上下文;
++       单实例单线程 JIT 侥幸存活 (慢), 双实例并发 LLVM JIT 直接 abort
++       (2026-08-17 dual_media.pptx 实测定位)。SDL_HINT_FRAMEBUFFER_
++       ACCELERATION=0 使该函数返回 FALSE → 走 X11 原生 XShm 路径, GL
++       完全不加载 (Xvfb 恒无 GPU, 经验 19b) */
++    SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
++    avformat_network_init();
++
++    ffplay_embed_parent_window = parent_window;
++    VideoState *is = stream_open(url, NULL);
++    if (!is) {
++        av_log(NULL, AV_LOG_FATAL, "Failed to initialize VideoState!\n");
++        return NULL;
++    }
++    is->pump_tid = SDL_CreateThread(ffplay_engine_pump_thread, "ffplay_pump", is);
++    if (!is->pump_tid) {
++        do_exit(is);
++        return NULL;
++    }
++    return is;
++}
++
++void ffplay_engine_destroy(void *handle)
++{
++    VideoState *is = handle;
++    if (!is)
++        return;
++    is->abort_request = 1;
++    if (is->pump_tid)
++        SDL_WaitThread(is->pump_tid, NULL);
++    do_exit(is); /* 嵌入版 do_exit: 清理但不退出进程/不 SDL_Quit */
++}
++
++void ffplay_engine_play(void *handle)
++{
++    VideoState *is = handle;
++    if (is && is->paused)
++        stream_toggle_pause(is);
++}
++
++void ffplay_engine_pause(void *handle)
++{
++    VideoState *is = handle;
++    if (is && !is->paused)
++        stream_toggle_pause(is);
++}
++
++int ffplay_engine_is_playing(void *handle)
++{
++    VideoState *is = handle;
++    return is && !is->paused && !is->abort_request;
++}
++
++void ffplay_engine_seek(void *handle, double seconds)
++{
++    VideoState *is = handle;
++    if (is)
++        stream_seek(is, (int64_t)(seconds * AV_TIME_BASE), 0, 0);
++}
++
++double ffplay_engine_get_media_time(void *handle)
++{
++    VideoState *is = handle;
++    if (!is)
++        return 0.0;
++    double t = get_master_clock(is);
++    /* 时钟未初始化 (新实例创建瞬间/流未启动) 时 get_master_clock 返回 nan,
++       归零避免 nan 传播到上层 (2026-08-17 落地) */
++    return isnan(t) ? 0.0 : t;
++}
++
++double ffplay_engine_get_duration(void *handle)
++{
++    VideoState *is = handle;
++    if (!is || !is->ic)
++        return 0.0;
++    return is->ic->duration == AV_NOPTS_VALUE ? 0.0 : (double)is->ic->duration / AV_TIME_BASE;
++}
++
++void ffplay_engine_set_loop(void *handle, int count)
++{
++    VideoState *is = handle;
++    if (is)
++        loop = count; /* 全局选项 (与官方 ffplay 一致, 嵌入固定) */
++}
++
++/* 调试: 打印内部时钟/队列状态 (探针用) */
++void ffplay_engine_debug(void *handle)
++{
++    VideoState *is = handle;
++    if (!is)
++        return;
++    /* ENGINE-DBG 探针调试: av_log debug 级 (ORT_LOG_LEVEL=debug 才输出) */
++    av_log(NULL, AV_LOG_DEBUG, "[ENGINE-DBG] paused=%d audio_clock=%f isnan=%d audclk.serial=%d audioq.serial=%d vidclk.serial=%d videoq.serial=%d seek_req=%d\n",
++            is->paused, is->audio_clock, isnan(is->audio_clock) ? 1 : 0,
++            is->audclk.serial, is->audioq.serial,
++            is->vidclk.serial, is->videoq.serial, is->seek_req);
++}
++
++void ffplay_engine_get_window_size(void *handle, int *w, int *h)
++{
++    VideoState *is = handle;
++    if (!is) {
++        if (w) *w = 0;
++        if (h) *h = 0;
++        return;
++    }
++    if (w) *w = is->width;
++    if (h) *h = is->height;
++}
++
++void ffplay_engine_set_volume(void *handle, int percent)
++{
++    VideoState *is = handle;
++    if (!is)
++        return;
++    if (percent < 0) percent = 0;
++    if (percent > 100) percent = 100;
++    is->audio_volume = percent * SDL_MIX_MAXVOLUME / 100;
++}
++
++int ffplay_engine_get_volume(void *handle)
++{
++    VideoState *is = handle;
++    if (!is)
++        return -1;
++    return is->audio_volume * 100 / SDL_MIX_MAXVOLUME;
+ }
++#endif /* FFPLAY_EMBED */

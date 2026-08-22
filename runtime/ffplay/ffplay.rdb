@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<components xmlns="http://openoffice.org/2010/uno-components">
+  <component loader="com.sun.star.loader.SharedLibrary" environment="gcc3"
+      uri="ffplay.so">
+    <implementation name="com.sun.star.comp.avmedia.Manager_FFPlay"
+        constructor="ffplay_get_implementation">
+      <service name="com.sun.star.comp.avmedia.Manager_FFPlay"/>
+    </implementation>
+  </component>
+</components>
