@@ -9,10 +9,12 @@
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <cppuhelper/bootstrap.hxx> // cppu::bootstrap 三参重载 (Windows BootstrapSession 调用)
 #include <osl/thread.hxx>
 #include <rtl/string.hxx>
 
 #include <chrono>
+#include <cstring>
 #include <thread>
 
 
@@ -35,6 +37,10 @@ rtl::OUString s2u(const std::string& s) {
 
 #ifdef _WIN32
 
+#include <windows.h> // HMODULE/MAX_PATH/GetModuleHandleExA
+#include <stringapiset.h> // MultiByteToWideChar
+#include <winnls.h> // CP_UTF8
+
 std::string GetLinkDir() {
     char buf[MAX_PATH] = { 0 };
     HMODULE self = nullptr;
@@ -44,9 +50,9 @@ std::string GetLinkDir() {
     if (!self)
         self = GetModuleHandleA(nullptr);
     GetModuleFileNameA(self ? self : GetModuleHandleA(nullptr), buf, MAX_PATH);
-    char* slash = strrchr(buf, '\\');
+    const char* slash = std::strrchr(static_cast<const char*>(buf), '\\');
     if (slash)
-        *slash = 0;
+        buf[slash - buf] = 0;
     return buf;
 }
 
