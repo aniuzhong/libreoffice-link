@@ -528,6 +528,14 @@ bool OfficeRuntime::EnsureKernel(const std::string& user_installation) {
     // 机制同 SAL_DISABLEGL: bootstrap 子进程继承 env 快照 (经验 24);
     // 不覆盖宿主显式设置 (宿主 export ORT_MEDIA_BACKEND=gstreamer 可回退)。
     setenv("ORT_MEDIA_BACKEND", "ffplay", 0);
+    // 放映视图铺满窗口开关 (2026-08-24, bleed 缺陷根治): LO sd 补丁
+    // (slideshowimpl.cxx, 同 gstplayer/mediawindow 的本地改码模式) 读此变量 —
+    // 窗口化放映默认取 getClientRectangle() (永远保留状态栏布局槽 ~37px@100dpi),
+    // 底部留未绘制带 (透显缺陷的"接收漏洞") 且幻灯片被纵向压扁 ~3.4%。=1 时
+    // 放映视图铺满父窗口: 带消失、比例精确。机制同上: env 快照继承 (经验 24),
+    // 不覆盖宿主 (宿主 export ORT_SLIDE_FILL_WINDOW=0 可回退)。
+    // 见 doc/defect-impress-bleed-through.md。
+    setenv("ORT_SLIDE_FILL_WINDOW", "1", 0);
     // 媒体 sink 修复实际走 LO 源码改动 + 组件替换部署 (HANDOFF 经验 18):
     // gstplayer.cxx 回退分支优先 ximagesink, 增量编译后替换 libavmediagst.so
     // —— 生效组件是 libavmediagst.so (不是 libavmedialo.so), **仅 gstreamer

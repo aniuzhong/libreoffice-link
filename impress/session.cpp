@@ -147,18 +147,29 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
         if (osl::FileBase::getFileURLFromSystemPath(sysPath, docUrl) != osl::FileBase::E_None)
             return false;
     }
-    css::uno::Sequence<css::beans::PropertyValue> loadProps(1);
+    // ReadOnly: 播放为只读消费, 避免 LO 在源目录创建/校验文档锁 (`.~lock.<name>#`),
+    // 根除残留锁导致 loadComponentFromURL 静默返回 null 的缺陷 (缺陷报告)。
+    css::uno::Sequence<css::beans::PropertyValue> loadProps(2);
     loadProps[0].Name = "Hidden";
     loadProps[0].Value <<= true;
+    loadProps[1].Name = "ReadOnly";
+    loadProps[1].Value <<= true;
     try {
         component_ = loader->loadComponentFromURL(docUrl, "_blank", 0, loadProps);
     } catch (const css::uno::Exception& e) {
         OfficeLogErr("[ImpressLink] loadComponentFromURL failed: %s", u2s(e.Message).c_str());
         return false;
     }
-    OfficeLog("[ImpressLink] doc loaded this=%p %s", (void*)this, component_.is() ? "OK" : "FAILED");
-    if (!component_.is())
+    if (!component_.is()) {
+        // 静默 null: 优先怀疑残留锁文件 (诊断, 缺陷报告短期项)
+        std::string lock = link_utils::GetLockFileIfExists(path);
+        std::string msg = lock.empty()
+            ? std::string("doc loaded FAILED (null); no lock file")
+            : std::string("doc loaded FAILED (null); stale lock file detected: ") + lock;
+        OfficeLogWarn("[ImpressLink] %s", msg.c_str());
         return false;
+    }
+    OfficeLog("[ImpressLink] doc loaded this=%p OK", (void*)this);
 
     Reference<css::frame::XModel> model(component_, UNO_QUERY);
     controller_ = model->getCurrentController();

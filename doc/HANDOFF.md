@@ -19,8 +19,9 @@
 | 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42 详述+失效条件+零引用清单) |
 | 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [design-platform-isolation.md](design-platform-isolation.md) |
 | FramePump 设计决策/性能预算/测试矩阵 | [design-framepump.md](design-framepump.md) |
+| **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [defect-impress-bleed-through.md](defect-impress-bleed-through.md) |
 | ffplay 尺寸链/多实例根治/静音/日志 | [design-ffplay.md](design-ffplay.md) |
-| **当前未修复漏洞 (V3 待修; V1/V2/V4/V5/V6 已修)** | **七、已知漏洞** |
+| **当前未修复漏洞 (V3 待修; V1/V2/V4/V5/V6 已修)** | **八、已知漏洞** |
 | 隔离回归规则(改哪里要回归什么) | 四、4.2 隔离回归规则速查 |
 | soffice loadComponentFromURL 排查实战 (经验 46) | [troubleshooting-soffice-load.md](troubleshooting-soffice-load.md) |
 
@@ -71,11 +72,11 @@ NovaLibreOfficePlayer/    (NovaPlayerTools/cmake 单一树子项目; target: Off
 ### 1.2 已验证能力
 
 - 单测 9 场景 50 检查(bootlock/slots/crossproc/acquire/adopt/dirtyenv/faultinj/linksmoke/gstcheck);加固后连续多轮全绿(经验 35)
-- 探针回归(登记 9 个, CMake `-DBUILD_TOOLS=ON`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)
+- 探针回归(登记 10 个, CMake `-DBUILD_TOOLS=ON`):impress_nextpage/impress_multi(2 xlsx + pptx 并发,slot 0/1/2 无死锁)/media_green 双态(ffplay 默认 + gstreamer 回退,帧间差异判据)/ffplay_inject(注入 SUCCESS)/ffplay_engine(引擎推进/pause/seek/双实例)/xvfb_stress(尺寸上限)/pdf_render(writer 两方案可行性)/writer(翻页/缓存/Prev)/word_core(NovaOfficeCore 分发)/bleed_probe(透显缺陷复现/根治回归, 经验 47; 附 composite_redirect_probe)
 - **同页双视频并行播放**(dual_media.pptx 实证,经验 37);Demo 实测三画面/翻页正常;媒体页真实视频+音频
 - **writerlink 底层链路已闭环**(writerlink,经验 38):底层(翻页 20-53ms/页、LRU、缓存命中 0ms、Prev 验证)探针实测全绿。**上层接线已回退(2026-08-18)**:NovaOfficeCore/NovaPlayer/NovaPlayerDemo 的 word LibreOffice 接入改动(IWordManager 抽象/LibreOfficeWriterManager 分发/NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举/Demo Word 模式下拉框)整体还原,功能就绪待后续接入。LibreOfficeWriterManager.cpp/.h 作为样板保留(NovaOfficeCore/word/,不参与构建,去 IWordManager 依赖)
 - 抓帧性能:XShm 1080p ~1ms/1440p ~2.5ms/2160p ~5.9ms;Xvfb 30720x2160 RSS ~300MB
-- LO 源码两处改动已固化远端:commit `83e0b9c3e`(gstplayer.cxx + mediawindow_impl.cxx),master == origin
+- LO 源码两处改动已固化远端:commit `83e0b9c3e`(gstplayer.cxx + mediawindow_impl.cxx),master == origin;**第三处待固化**(2026-08-24, sd/slideshowimpl.cxx 窗口化放映铺满补丁, env ORT_SLIDE_FILL_WINDOW 门控, 经验 47 —— 已增量编译+部署 bin_x86_64_kylin 验证, 尚未 commit)
 - compat/ffplay.c、cmdutils.c/h 与 SDK 上游(FFmpeg4.4.1SDK/source/ffmpeg-4.4/fftools)**diff=0**(2026-08-17 实测);ffplay_embed.patch 重放 == ffplay_embed.c(改 embed.c 必须回填 patch)
 
 ### 1.3 构建/部署
@@ -235,6 +236,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | 13 | **XShm + BGRX 字节序直拷**:Xvfb TrueColor24 视觉=32bpp LSBFirst BGRX → XShmGetImage(0.01ms)+memcpy+alpha(1080p ~1ms vs XGetImage 转换 ~9ms)。非 BGRX 自动回退。links 必须链 X11::Xext | 08-12 前 | 高 |
 | 14 | **屏高 ≥ 最大文档分辨率**(2160p 窗口在 1080 屏 BadMatch);StartXvfb 按 max_doc_height 定高 | 08-12 | 高 |
 | 15 | **屏尺寸 16 位坐标上限 32767 内无阻碍;30720x2160 RSS ~300MB 可起** | 08-12 | 高 |
+| 47 | **透显缺陷根治 (impress 底带透显 xlsx, 2026-08-24 二轮取证)**: 真机制 = ① 窗口化放映视图只画到 window-38px (SFX getClientRectangle 永远保留状态栏槽, 100dpi→38px; 且父容器也被 SFX 缩到 window-38) → 底带从未绘制 + 幻灯片纵向压扁 ~3.4%; ② bg=None 未绘制带是"透明玻璃", 文档窗口按模板钉在 (10,1) 诞生互相重叠, 带吸附下方文档像素; ③ XMoveWindow 屏幕级 blit 把吸附像素搬进 slot → 抓帧读到别的文档内容。根治 = LO 补丁 (slideshowimpl.cxx, env ORT_SLIDE_FILL_WINDOW=1 门控, EnsureKernel 默认置 1): 窗口化放映取**顶层 VCL 窗口**尺寸铺满 (getClientRectangle/父窗口/rSize 全被 SFX 缩过, 不可用) → 未绘制带不存在+比例精确; Fix A (显式背景+清+重映射) 保留作保险带; 卫生层 = 模板给 Calc Factory 钉 `0,0,3840,2160` (= 单 slot 大小, 消 30720 全屏瞬态, 落位仍按需缩小; 单独不治透显)。定论: 被覆盖的活窗口 Expose 自愈, 持久残影只在无人认领区 (未绘制带/中间窗/已销毁窗旧位) → "出生小窗撑大"/"落位前刷黑 slot"均无净收益。证伪: calc 全屏残留非必要源 / root 卫生无效 (暴露被中间 bg=None LO 窗口截胡) / resize 撬不动 SFX 布局 / redirect 不必要; "残留行 y=1042" 是视图底边亮线与 calc 白行的巧合匹配 (测量伪影)。全链验证矩阵+回归见 [defect-impress-bleed-through.md](defect-impress-bleed-through.md)。坑: 探针 dlopen 的 X 扩展库 dlclose 必须晚于 XCloseDisplay (Xext close hook 悬垂 SIGSEGV) | 08-24 | 高(实证+全回归) |
 
 ### 2.4 媒体播放
 
@@ -291,7 +293,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 | 排序 | 事项 | 说明 |
 |---|---|---|
-| ★★ | **V3 漏洞修复** (七、已知漏洞): 快速 teardown-recreate 卡死 (impress settle_ms=2500 × 200 轮累加超时)。V1/V4 已关闭, V2 已修复 (SetWindowSize 去 sleep + 节流), V5 已关闭 (API 约束), V6 已修复 (Stop 防 join self) | 当前中心 |
+| ★★ | **V3 漏洞修复** (八、已知漏洞): 快速 teardown-recreate 卡死 (impress settle_ms=2500 × 200 轮累加超时)。V1/V4 已关闭, V2 已修复 (SetWindowSize 去 sleep + 节流), V5 已关闭 (API 约束), V6 已修复 (Stop 防 join self) | 当前中心 |
 | ★★ | **user 模板部署保障 (2026-08-18, 两平台)**: 模板 = 仓库 `templates/user/registrymodifications.xcu` (净化, 经验 40) → 部署 `office/program/templates/`。**Linux**: office_runtime POST_BUILD 自动拷贝 ✓; **Windows**: 不构建 office_runtime, **NovaPlayer 打包脚本 (CopyFile.bat 等) 需加 templates/ 拷贝项** —— 缺失时 WindowsPlatform::PrepareEnvironment seed 失败 → LO 默认 UI (2026-08-18 探针实测, 已手动部署当前环境) | 打包流程 |
 | ★★ | **word 上层接入**(writerlink 底层就绪, 经验 38):NovaOfficeCore(LibreOfficeWriterManager 样板已保留, 恢复继承+override+构建配置)+ NovaPlayer(NP_WORD_PLAY_MODE_ANIMATION_LIBREOFFICE 枚举 + WordInstance 映射)+ Demo(Word 模式下拉框) | 功能就绪待接入 |
 | ★ | **经验 42 阶段5 (可选)**: 平台层段内比对 (CaptureFrame 增量 unchanged 参数) + dedupe + calc zoom 维度 A/B; 开放问题 A (帧新鲜度 TTL) / B (calc tick 20ms 延迟接受度) 待 NovaPlayer 侧验证 | 远期优化 |
@@ -347,7 +349,35 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ---
 
-## 六、FFplay 嵌入专项 [经验+设计] (updated 2026-08-20)
+## 六、共享屏治理专项 [机制·必要性实证] (updated 2026-08-24)
+
+> Impress 底带透显缺陷根治后 (经验 47) 对共享大屏 (Xvfb 30720×2160, 8 slot) 治理栈的
+> 完整盘点。**每层的必要性均经 A/B 实测** (bleed_probe 开关矩阵, 见
+> [defect-impress-bleed-through.md](defect-impress-bleed-through.md) §5), 定性分三档:
+> 机制(缺了不工作)/ 根治(缺了缺陷回来)/ 卫生(对抓帧输出冗余, 按运行收益保留)。
+> 防御原则: **只保留一层保险** (落位黑底), 其余各层各有非防御的存在理由, 不过度防御。
+
+按会话生命周期顺序:
+
+| # | 层 | 机制 | 必要性定性 (实证) |
+|---|---|---|---|
+| 1 | 大屏+slot 分区 | 每 session 跨进程位图分一个 3840×2160 slot, 窗口互不重叠 | **机制** (经验 1/10: 遮挡区抓帧返回背景, 历史踩坑, 无替代) |
+| 2 | 出生几何钉住 (模板) | calc `0,0,3840,2160` / impress `1920,1080`, 不再以 30720 全屏创建渲染 | **卫生** (撤钉实测输出仍 0 行泄漏 —— 对抓帧冗余; 保留理由: 引导渲染足迹 8×↓ + 屏面残渣收敛在自家 slot, 一行配置零运行时成本) |
+| 3 | 窗口化放映铺满 (LO 补丁) | 放映视图取**顶层 VCL 窗口**尺寸而非 SFX 客户区 (后者永远扣状态栏槽 ~38px); `ORT_SLIDE_FILL_WINDOW=1`, EnsureKernel 默认置 1 | **根治+质量, 不可替代** (仅黑底时带变黑但**压扁 3.4% 仍在**; 铺满后带=0 且精确 16:9; 撤补丁缺陷必现 13 行) |
+| 4 | 落位黑底 (显式背景+清+重映射) | SizeWindowToSlot 后整窗落黑再触发 LO 重绘; `ORT_BLEED_FIX=0` 可关 | **唯一保险层** (当前栈下实测冗余 —— 补丁在则关掉也是 0 行; 保留理由: LO 升级忘重打补丁的窗口期兜底, 一次性成本≈0) |
+| 5 | 抓帧只读自己窗口 | XShmGetImage 读 session 窗口, 不读裸屏 | **机制** (抓帧模型本身; 配合 1 无遮挡) |
+| 6 | 生命周期清场 | 孤儿 soffice 回收 / Xvfb adopt-or-起 / 僵尸检测 / 杀透+清 lock/socket / slot owner-PID 回收 | **机制** (经验 6/12/35 历史踩坑; 跨会话复用屏的稳定性前提) |
+
+- 残影模型定论 (经验 47): 被覆盖的**活窗口 Expose 自愈**, 持久残影只在无人认领区
+  (未绘制带 / bg=None 中间窗 / 已销毁窗旧位) —— 第 3 层消灭最常见无人认领区,
+  第 4 层兜底其余; "出生小窗撑大"/"落位前刷黑 slot"/root 卫生/XComposite redirect
+  均已证伪或无净收益 (缺陷文档 §6, 勿重走)。
+- 验证入口: `bleed_probe` (输出透显指标+几何指标); 全开关关=必现 13 行, 全开=0 行,
+  是本专项的回归基线。
+
+---
+
+## 七、FFplay 嵌入专项 [经验+设计] (updated 2026-08-20)
 
 > ffplay 嵌入引擎 (runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 专项治理。**尺寸链修复/多实例根治 (三个 bug + render_mutex)/静音专项 (C1 UNO 远程调用全链路)/日志专项 (ffplay_<pid>.log + av_log callback)** 见 [design-ffplay.md](design-ffplay.md)。
 > 摘要: ① video_open 尺寸修复 (SDL_GetWindowSize 替代 640x480 硬编码); ② 多实例根治 (audio_dev 下沉 VideoState + render_mutex + per-instance 销毁); ③ 静音 C1 简化版 (XFastPropertySet handle 0 = MUTE_ALL, UNO pipe 跨进程); ④ 日志专项 (spdlog 独立 logger, [FFmpeg/<module>] 前缀, flush_on(info))。
@@ -355,7 +385,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ---
 
-## 七、已知漏洞 [1 待修/5 已修] (updated 2026-08-21)
+## 八、已知漏洞 [1 待修/5 已修] (updated 2026-08-21)
 
 > 攻击性测试发现的漏洞。已修复的标注"已修复"并保留在此供查阅。
 > 复现探针: `tools/CMakeLists.txt` 链接组 `add_multi_tools` (attack_uaf/attack_resize/attack_pagenav/attack_mute_teardown/attack_lock_inversion/attack_cb_join_self)。

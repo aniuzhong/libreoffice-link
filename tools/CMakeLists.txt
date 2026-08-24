@@ -224,9 +224,22 @@ add_multi_tools(attack_cross_process_probe linux/attack_cross_process_probe.cpp)
 # ---- 辅助探针 ----
 add_engine_tools(ffplay_window_size_probe linux/ffplay_window_size_probe.cpp)
 add_multi_tools(ui_1px_probe linux/ui_1px_probe.cpp)
+add_multi_tools(bleed_probe linux/bleed_probe.cpp)
+target_link_libraries(bleed_probe PRIVATE dl) # dlsym 动态加载 libXcomposite (无 dev 包)
+add_multi_tools(composite_redirect_probe linux/composite_redirect_probe.cpp)
+target_link_libraries(composite_redirect_probe PRIVATE dl X11::Xext) # dlsym + XShm
 add_office_tools(minimal_load_probe linux/minimal_load_probe.cpp)
 add_impress_tools(iframe_probe linux/iframe_probe.cpp)
 add_impress_tools(mute_isolation_probe linux/mute_isolation_probe.cpp)
+
+# lockfile 探针: 文档锁文件缺陷复现/验证 (引用 tools/data/locks 真实残留锁)。
+# 注入 LOCKS_DATA_DIR 宏 = 源码仓库备份锁目录, 探针运行时按文档 basename 装机同名锁。
+add_office_tools(lockfile_probe linux/lockfile_probe.cpp)
+add_office_tools(lockfile_fix_probe linux/lockfile_fix_probe.cpp)
+foreach(_lockp lockfile_probe lockfile_fix_probe)
+    target_compile_definitions(${_lockp} PRIVATE
+        LOCKS_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/locks")
+endforeach()
 
 # ---- 旧探针 (过时, 保留不删, 标记 OBSOLETE) ----
 add_calc_tools(static_race_probe linux/static_race_probe.cpp)

@@ -209,13 +209,16 @@ bool WriterSession::EnsurePdf(const std::string& doc_path, const std::string& pa
             rtl::OUString docUrl;
             if (osl::FileBase::getFileURLFromSystemPath(s2u(doc_path), docUrl) != osl::FileBase::E_None)
                 return false;
-            css::uno::Sequence<css::beans::PropertyValue> props(1);
+            css::uno::Sequence<css::beans::PropertyValue> props(2);
             props[0].Name = "Hidden";
             props[0].Value <<= true;
+            // ReadOnly: 只读转换, 避免在源目录创建/校验文档锁 (缺陷报告根除项)
+            props[1].Name = "ReadOnly";
+            props[1].Value <<= true;
             if (!password.empty()) {
-                props.realloc(2);
-                props[1].Name = "Password";
-                props[1].Value <<= s2u(password);
+                props.realloc(3);
+                props[2].Name = "Password";
+                props[2].Value <<= s2u(password);
             }
             Reference<css::lang::XComponent> wdoc;
             try {
@@ -224,7 +227,11 @@ bool WriterSession::EnsurePdf(const std::string& doc_path, const std::string& pa
                 OfficeLogDbg("[WriterLink] docx load exception: %s", u2s(e.Message).c_str());
             }
             if (!wdoc.is()) {
-                OfficeLogErr("[WriterLink] docx load failed: %s", doc_path.c_str());
+                std::string lock = link_utils::GetLockFileIfExists(doc_path);
+                std::string why = lock.empty()
+                    ? std::string("no lock file")
+                    : std::string("stale lock file detected: ") + lock;
+                OfficeLogErr("[WriterLink] docx load failed: %s; %s", doc_path.c_str(), why.c_str());
                 return false;
             }
             std::string tmp = pdf_path_ + ".convert.tmp";

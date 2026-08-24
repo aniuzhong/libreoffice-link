@@ -220,13 +220,24 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
         if (osl::FileBase::getFileURLFromSystemPath(sysPath, docUrl) != osl::FileBase::E_None)
             return false;
     }
-    css::uno::Sequence<css::beans::PropertyValue> loadProps(1);
+    css::uno::Sequence<css::beans::PropertyValue> loadProps(2);
     loadProps[0].Name = "Hidden";
     loadProps[0].Value <<= true;
+    // ReadOnly: 播放为只读消费, 避免 LO 创建/校验源目录文档锁 (`.~lock.<name>#`),
+    // 根除残留锁导致 loadComponentFromURL 静默返回 null 的缺陷 (缺陷报告)。
+    loadProps[1].Name = "ReadOnly";
+    loadProps[1].Value <<= true;
     component_ = loader->loadComponentFromURL(docUrl, "_blank", 0, loadProps);
-    OfficeLog("[CalcLink] doc loaded this=%p %s", (void*)this, component_.is() ? "OK" : "FAILED");
-    if (!component_.is())
+    if (!component_.is()) {
+        // 静默 null: 优先怀疑残留锁文件 (诊断)
+        std::string lock = link_utils::GetLockFileIfExists(path);
+        std::string msg = lock.empty()
+            ? std::string("doc loaded FAILED (null); no lock file")
+            : std::string("doc loaded FAILED (null); stale lock file detected: ") + lock;
+        OfficeLogWarn("[CalcLink] %s", msg.c_str());
         return false;
+    }
+    OfficeLog("[CalcLink] doc loaded this=%p OK", (void*)this);
 
     Reference<XModel> model(component_, UNO_QUERY);
     controller_ = model->getCurrentController();

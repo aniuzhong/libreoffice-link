@@ -255,5 +255,16 @@ std::filesystem::path to_path(const std::string& utf8) {
 #endif
 }
 
+// ---- 文档锁文件检测 (缺陷诊断, 见头文件注释) ----
+std::string GetLockFileIfExists(const std::string& doc_path) {
+    std::filesystem::path p = to_path(doc_path);
+    std::filesystem::path lock =
+        p.parent_path() / (".~lock." + p.filename().string() + "#");
+    std::error_code ec;
+    if (std::filesystem::exists(lock, ec) && !ec)
+        return lock.string();
+    return std::string();
+}
+
 
 }  // namespace link_utils
