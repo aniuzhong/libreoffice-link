@@ -1392,7 +1392,7 @@ static int video_open(VideoState *is)
         if (is->window) {
             /* 强制软件渲染: Xvfb 恒无 GPU (经验 19b 哲学)。flags=0 时 SDL
                驱动顺序 OpenGL 优先, Xvfb 带 mesa 软件 GLX 时双实例双线程
-               swrast 渲染崩 soffice.bin (2026-08-17 dual_media.pptx 实测,
+               swrast 渲染崩 soffice.bin (dual_media.pptx 实测,
                栈 swrast_dri←GLX_mesa←SDL2←ffplay) */
             is->renderer = SDL_CreateRenderer(is->window, -1, SDL_RENDERER_SOFTWARE);
             if (is->renderer)
@@ -3949,7 +3949,7 @@ void *ffplay_engine_create(const char *url, void *parent_window)
        ShouldAttemptTextureFramebuffer / SDL_CreateWindowTexture, 不读
        SDL_HINT_RENDER_DRIVER), Xvfb 的 mesa 软件 GLX 下创建 swrast 上下文;
        单实例单线程 JIT 侥幸存活 (慢), 双实例并发 LLVM JIT 直接 abort
-       (2026-08-17 dual_media.pptx 实测定位)。SDL_HINT_FRAMEBUFFER_
+       (dual_media.pptx 实测定位)。SDL_HINT_FRAMEBUFFER_
        ACCELERATION=0 使该函数返回 FALSE → 走 X11 原生 XShm 路径, GL
        完全不加载 (Xvfb 恒无 GPU, 经验 19b) */
     SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
@@ -4014,7 +4014,7 @@ double ffplay_engine_get_media_time(void *handle)
         return 0.0;
     double t = get_master_clock(is);
     /* 时钟未初始化 (新实例创建瞬间/流未启动) 时 get_master_clock 返回 nan,
-       归零避免 nan 传播到上层 (2026-08-17 落地) */
+       归零避免 nan 传播到上层 */
     return isnan(t) ? 0.0 : t;
 }
 

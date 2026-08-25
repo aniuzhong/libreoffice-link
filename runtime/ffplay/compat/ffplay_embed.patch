@@ -1,5 +1,5 @@
 --- ffplay.c	2026-08-14 15:28:11.569384057 +0800
-+++ ffplay_embed.c	2026-08-19 18:36:45.097345900 +0800
++++ ffplay_embed.c	2026-08-25 16:02:54.578127859 +0800
 @@ -242,6 +242,7 @@
      AVStream *audio_st;
      PacketQueue audioq;
@@ -91,7 +91,7 @@
  }
  
  static void sigterm_handler(int sig)
-@@ -1353,7 +1384,37 @@
+@@ -1353,7 +1384,39 @@
      w = screen_width ? screen_width : default_width;
      h = screen_height ? screen_height : default_height;
  
@@ -104,7 +104,7 @@
 +        if (is->window) {
 +            /* 强制软件渲染: Xvfb 恒无 GPU (经验 19b 哲学)。flags=0 时 SDL
 +               驱动顺序 OpenGL 优先, Xvfb 带 mesa 软件 GLX 时双实例双线程
-+               swrast 渲染崩 soffice.bin (2026-08-17 dual_media.pptx 实测,
++               swrast 渲染崩 soffice.bin (dual_media.pptx 实测,
 +               栈 swrast_dri←GLX_mesa←SDL2←ffplay) */
 +            is->renderer = SDL_CreateRenderer(is->window, -1, SDL_RENDERER_SOFTWARE);
 +            if (is->renderer)
@@ -132,7 +132,7 @@
          window_title = input_filename;
      SDL_SetWindowTitle(window, window_title);
  
-@@ -1363,6 +1424,7 @@
+@@ -1363,6 +1426,7 @@
          SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
      SDL_ShowWindow(window);
  
@@ -140,7 +140,7 @@
      is->width  = w;
      is->height = h;
  
-@@ -1372,6 +1434,15 @@
+@@ -1372,6 +1436,15 @@
  /* display the current picture, if any */
  static void video_display(VideoState *is)
  {
@@ -156,7 +156,7 @@
      if (!is->width)
          video_open(is);
  
-@@ -1382,6 +1453,9 @@
+@@ -1382,6 +1455,9 @@
      else if (is->video_st)
          video_image_display(is);
      SDL_RenderPresent(renderer);
@@ -166,7 +166,7 @@
  }
  
  static double get_clock(Clock *c)
-@@ -2513,6 +2587,7 @@
+@@ -2513,6 +2589,7 @@
  
  static int audio_open(void *opaque, int64_t wanted_channel_layout, int wanted_nb_channels, int wanted_sample_rate, struct AudioParams *audio_hw_params)
  {
@@ -174,7 +174,7 @@
      SDL_AudioSpec wanted_spec, spec;
      const char *env;
      static const int next_nb_channels[] = {0, 0, 1, 6, 2, 6, 4, 6};
-@@ -2542,7 +2617,7 @@
+@@ -2542,7 +2619,7 @@
      wanted_spec.samples = FFMAX(SDL_AUDIO_MIN_BUFFER_SIZE, 2 << av_log2(wanted_spec.freq / SDL_AUDIO_MAX_CALLBACKS_PER_SEC));
      wanted_spec.callback = sdl_audio_callback;
      wanted_spec.userdata = opaque;
@@ -183,7 +183,7 @@
          av_log(NULL, AV_LOG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s\n",
                 wanted_spec.channels, wanted_spec.freq, SDL_GetError());
          wanted_spec.channels = next_nb_channels[FFMIN(7, wanted_spec.channels)];
-@@ -2704,7 +2779,7 @@
+@@ -2704,7 +2781,7 @@
          }
          if ((ret = decoder_start(&is->auddec, audio_thread, "audio_decoder", is)) < 0)
              goto out;
@@ -192,7 +192,7 @@
          break;
      case AVMEDIA_TYPE_VIDEO:
          is->video_stream = stream_index;
-@@ -3704,8 +3779,16 @@
+@@ -3704,8 +3781,16 @@
  }
  
  /* Called from the main */
@@ -209,7 +209,7 @@
      int flags;
      VideoState *is;
  
-@@ -3802,4 +3885,191 @@
+@@ -3802,4 +3887,192 @@
      /* never returns */
  
      return 0;
@@ -275,7 +275,7 @@
 +       ShouldAttemptTextureFramebuffer / SDL_CreateWindowTexture, 不读
 +       SDL_HINT_RENDER_DRIVER), Xvfb 的 mesa 软件 GLX 下创建 swrast 上下文;
 +       单实例单线程 JIT 侥幸存活 (慢), 双实例并发 LLVM JIT 直接 abort
-+       (2026-08-17 dual_media.pptx 实测定位)。SDL_HINT_FRAMEBUFFER_
++       (dual_media.pptx 实测定位)。SDL_HINT_FRAMEBUFFER_
 +       ACCELERATION=0 使该函数返回 FALSE → 走 X11 原生 XShm 路径, GL
 +       完全不加载 (Xvfb 恒无 GPU, 经验 19b) */
 +    SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
@@ -340,7 +340,7 @@
 +        return 0.0;
 +    double t = get_master_clock(is);
 +    /* 时钟未初始化 (新实例创建瞬间/流未启动) 时 get_master_clock 返回 nan,
-+       归零避免 nan 传播到上层 (2026-08-17 落地) */
++       归零避免 nan 传播到上层 */
 +    return isnan(t) ? 0.0 : t;
 +}
 +

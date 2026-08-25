@@ -1,10 +1,5 @@
-// ffplay_player.cxx — XPlayer 真播放器: 基于 ffplay 嵌入引擎 (compat/ffplay_embed.c,
-// FFPLAY_EMBED), 复用官方 ffplay 全部播放能力 (解码/同步/音频/seek/循环)。
-// 渲染: 引擎 SDL_CreateWindowFrom(LO 媒体子窗口) — 窗口句柄来自 createPlayerWindow
-// 的 aArgs[0] (经验 30/34)。
-// 生命周期: createPlayer 仅存 URL; createPlayerWindow (窗口句柄就绪) 创建引擎;
-// LO 对 XPlayerWindow 的调用 (setPosSize 等) 由 PlayerWindowShell no-op 壳承接
-// (引擎自渲染到 LO 子窗口, LO 侧窗口对象无需绘制逻辑)。
+// ffplay_player.cxx — XPlayer 真播放器 (ffplay 嵌入引擎, 经验 30/34)。
+// 职责与生命周期见 doc/ffplay-embed.md §4/§1。
 #include "ffplay_player.hxx"
 #include "ffplay_window.hxx"
 #include "ffplay_log.h"  // FFLOG_*
@@ -21,18 +16,7 @@
 using namespace css;
 using namespace css::uno;
 
-// ---- 静音专项 (方案 A, 2026-08-21 重构): 物理窗口句柄归属 ----
-// 设计: PptX 单 slide 多媒体 shape 各起一 XPlayer 实例, LO UNO 无 setMuteAll;
-//   SetMuteAll 按物理 parent_window_id 过滤, 替代易错的 session_id 时序归属。
-// 触发路径: impresslink.so (主进程) 经 UNO remote ctx
-//   createInstance("Manager_FFPlay") → QI XFastPropertySet →
-//   setFastPropertyValue(MGR_PROP_MUTE_WINDOWS, {window_ids, mute}) → 调本 SetMuteAll。
-//   (FfplayManager 与 g_engines 同处 soffice.bin 子进程, 调用天然在子进程内执行。)
-// 线程安全: 注册/注销/SetMuteAll 共享 g_engines_mutex。
-// 生命周期: createPlayerWindow 成功注册, ~FfplayPlayer destroy 前注销
-//   (避免悬挂指针; do_exit 全局销毁已 #ifndef FFPLAY_EMBED 圈掉, 不二次释放)。
-// 归属键 = X11 媒体子窗口 ID (LO mediawindow_impl.cxx createPlayerWindow args[0]),
-//   天然全局唯一且与 player 一一对应, 不依赖任何调用时序。
+// 静音归属 (方案 A): 物理窗口句柄做归属键, 机制见 doc/ffplay-embed.md §7。
 namespace {
 struct EngineEntry { void* engine; long window_id; };  // window_id = X11 媒体子窗口 ID
 std::mutex g_engines_mutex;
@@ -55,16 +39,7 @@ void FfplayPlayer::UnregisterEngine(void* engine) {
 
 void FfplayPlayer::SetMuteAll(const std::vector<long>& window_ids, bool mute) {
     std::lock_guard<std::mutex> lk(g_engines_mutex);
-    // 空列表 = no-op (不动任何引擎)
-    // 共享内核模式 (Linux) 实证 (2026-08-21): 切换 NovaPlayer item 时, 上层对切出/
-    //   切入的非 active session 调 SetMute(false), 这些 session 当前可能未创建 media
-    //   子窗口 (其 GetMediaWindowIds 返回空)。若空列表走 "all" 分支, 会误伤 active
-    //   session 的引擎, 解除其静音。正确语义: 空列表 = 该 session 无需静音的引擎,
-    //   no-op 即可, 不影响其他 session。
-    // Windows 独立进程模式天然隔离: 本 session 进程内即使没 media 子窗口, 也不会有
-    //   其他 session 的引擎在本进程 g_engines 内, "all" 语义历史上无副作用, 但为
-    //   语义一致性统一改为 no-op; Windows 模式如需"全静音本进程所有引擎", 应让
-    //   WindowsPlatform::GetMediaWindowIds() 真实枚举本 session 媒体子窗口 (TODO)。
+    // 空列表 = no-op (不动任何引擎; 共享内核免误伤他 session, 见 doc/ffplay-embed.md §7.2)
     if (window_ids.empty()) {
         FFLOG_INFO("[FFPLAY] SetMuteAll(wids=0, %s) engines=%zu matched=0 (no-op, empty wids)",
                    mute ? "true" : "false", g_engines.size());

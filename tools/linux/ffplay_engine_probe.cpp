@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
             // 引擎并发创建竞态: 微秒级连创时第二个实例 read_thread 可能不启动
             // (t=0/duration=0); 错开 500ms 完全正常。LO 真实路径两 player 创建
             // 间隔为媒体临时文件拷贝耗时 (天然满足), 非引擎缺陷, 探针模拟该节奏
-            // (2026-08-17 实证, HANDOFF 经验 37)
+            // (实证, HANDOFF 经验 37)
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         void *e = ffplay_engine_create(url, (void*)win);
         if (!e) { fprintf(stderr, "[%d] engine create FAILED\n", i); return 1; }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             double t = ffplay_engine_get_media_time(engines[i]);
             printf("[%d] t=%.2fs playing=%d\n", i, t, ffplay_engine_is_playing(engines[i]));
             // duration 在创建瞬间查是 0 (read_thread 尚未完成流探测), 播放
-            // 1s 后才有意义 (2026-08-17 定性: 接口已实现, 非桩)
+            // 1s 后才有意义 (定性: 接口已实现, 非桩)
             if (s == 0)
                 printf("[%d] duration=%.2fs (after 1s playback)\n", i,
                        ffplay_engine_get_duration(engines[i]));

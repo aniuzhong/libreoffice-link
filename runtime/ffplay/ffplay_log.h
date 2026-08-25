@@ -1,20 +1,6 @@
-// ffplay_log.h — ffplay 组件日志基础设施 (ffplay 日志专项, 见 doc/design-ffplay.md §4)
-//
-// 目标: ffplay.so (soffice.bin 子进程内被 dlopen) 自己初始化一份 spdlog logger,
-// 落盘 ~/.office-link/logs/ffplay_<pid>.log (pid = soffice.bin 子进程 pid)。
-// 复用 ORT_LOG=both|file|stderr|off + ORT_LOG_LEVEL=debug|info|warn|error 控制,
-// 与主进程 office_<pid>.log 同目录同格式 (跨进程时序对照友好)。
-//
-// av_log 接入: ffmpeg 库内 av_log() 经 av_log_set_callback 注册的自定义 callback
-// 转发到 spdlog, 输出带 [FFmpeg/<module>] 前缀 (module = AVClass.class_name, 如
-// "avi"/"h264"/"mp3")。av_log_set_level 同步 ORT_LOG_LEVEL。
-//
-// 不改上游代码 (ffplay_embed.c / cmdutils.c / ffplay.c, patch 纪律, 经验 34):
-//   仅注册 callback, 不改 ffmpeg 库内部行为。
-//
-// header-only (inline 函数 + FFLOG 宏): 所有 ffplay_*.cxx include 即用, 不引入
-// 额外 .cxx 文件; static 变量在 inline 函数内, C++17 magic statics 保证 per-process
-// 单实例 (多 TU 包含不冲突)。
+// ffplay_log.h — ffplay 组件日志基础设施 (ffplay 日志专项, 见 doc/ffplay-embed.md §8)。
+// header-only (inline + FFLOG 宏), C++17 magic statics 保证 per-process 单实例。
+// 不改上游代码 (ffplay_embed.c / cmdutils.c / ffplay.c, patch 纪律, 经验 34)。
 #pragma once
 
 #include <spdlog/spdlog.h>

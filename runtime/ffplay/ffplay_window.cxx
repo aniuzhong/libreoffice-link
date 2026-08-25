@@ -1,5 +1,4 @@
-// ffplay_window.cxx — XPlayerWindow no-op 壳 (经验 34 起: 渲染由 ffplay 引擎
-// SDL_CreateWindowFrom(LO 媒体子窗口) 接管, LO 侧 XPlayerWindow 仅承接接口调用)
+// ffplay_window.cxx — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 doc/ffplay-embed.md §4)
 #include "ffplay_window.hxx"
 #include "ffplay_log.h"  // FFLOG_*
 

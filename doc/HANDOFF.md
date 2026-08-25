@@ -5,7 +5,7 @@
 > 经验编号被代码注释引用,**编号只增不改**;每次认知提升更新"二、经验"(带时间+置信度),完成事项移入"一、现状"。
 >
 > **分层阅读 (2026-08-20 重构)**: 本文件 = Core(每次必读: 现状/沙箱运行策略/经验索引/漏洞/待办);
-> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[design-platform-isolation.md](design-platform-isolation.md)(平台隔离)/[design-framepump.md](design-framepump.md)(帧泵)/[design-ffplay.md](design-ffplay.md)(FFplay)。
+> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[design-platform-isolation.md](design-platform-isolation.md)(平台隔离)/[design-framepump.md](design-framepump.md)(帧泵)/[ffplay-embed.md](ffplay-embed.md)(FFplay 嵌入专项)。
 
 ---
 
@@ -20,7 +20,7 @@
 | 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [design-platform-isolation.md](design-platform-isolation.md) |
 | FramePump 设计决策/性能预算/测试矩阵 | [design-framepump.md](design-framepump.md) |
 | **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [defect-impress-bleed-through.md](defect-impress-bleed-through.md) |
-| ffplay 尺寸链/多实例根治/静音/日志 | [design-ffplay.md](design-ffplay.md) |
+| ffplay 尺寸链/多实例根治/静音/日志 | [ffplay-embed.md](ffplay-embed.md) |
 | **当前未修复漏洞 (V3 待修; V1/V2/V4/V5/V6 已修)** | **八、已知漏洞** |
 | 隔离回归规则(改哪里要回归什么) | 四、4.2 隔离回归规则速查 |
 | soffice loadComponentFromURL 排查实战 (经验 46) | [troubleshooting-soffice-load.md](troubleshooting-soffice-load.md) |
@@ -177,7 +177,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 - **媒体后端**:默认 ffplay(`ORT_MEDIA_BACKEND`,EnsureKernel setenv 不覆盖宿主);gstreamer 为验证过的回退路径(ximagesink 补丁版 libavmediagst.so 保留;.bak 为补丁前备份)
 - **GL 全禁用**:SAL_DISABLEGL=1(转场,经验 21)+ ffplay 的 SDL_FRAMEBUFFER_ACCELERATION=0 + SOFTWARE renderer(经验 37)——Xvfb 恒无 GPU,一切渲染固定软件路径
-- **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[KernelHost]`(子场景点分如 `[CalcLink.Scroll]`/`[Common.UIHide]`/`[Common.WinWindow]`/`[Common.WinProfile]`/`[Common.X11]`/`[Common.Boot]`);平台层 Tag() 输出 lowercase `[calc]/[impress]`(区分会话层 `[CalcLink]/[ImpressLink]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),独立 spdlog logger 落盘 ffplay_<pid>.log(见 [design-ffplay.md](design-ffplay.md) §4)。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准);两侧均 flush_on(info) 保证实时 tail -f
+- **日志体系(2026-08-18 收尾定稿)**:统一入口 `OfficeLog/Dbg/Warn/Err`(varargs,LogMsg 等历史包装已删);前缀 = target 名 `[OfficeRuntime]/[CalcLink]/[ImpressLink]/[WriterLink]/[KernelHost]`(子场景点分如 `[CalcLink.Scroll]`/`[Common.UIHide]`/`[Common.WinWindow]`/`[Common.WinProfile]`/`[Common.X11]`/`[Common.Boot]`);平台层 Tag() 输出 lowercase `[calc]/[impress]`(区分会话层 `[CalcLink]/[ImpressLink]`);ffplay 组件在 soffice 进程内(office_runtime.so 不在),独立 spdlog logger 落盘 ffplay_<pid>.log(见 [ffplay-embed.md](ffplay-embed.md) §4)。级别:info=生命周期主线 / debug=诊断细节(窗口扫描/UI 自省/渲染计时) / warn=防御拦截与回退 / error=失败;文件格式 `[时间] [level] [前缀] 消息`,双平台一致(win_office_log 对偶)。开关:ORT_LOG=both(默认)|file|stderr|off(**off 真 silent**)、ORT_LOG_LEVEL=debug|info(默认)|warn|error。落位 `office_paths::logs_dir()/office_<pid>.log`(Linux spdlog 5MB×3 轮转;stderr 副本有缓冲差异,排查以文件为准);两侧均 flush_on(info) 保证实时 tail -f
 - **Windows 平台隔离回归已完成 (2026-08-19)**: 编译零错误 (win_platform 新接口 Plan/BeginBoot/DiscoverWindow/FormWindow/ApplyNativeFullscreen/OnSessionEnd + calc F 反序 + impress 全屏放映 + writer KernelHost); 探针五段全绿 + NovaPlayerDemo calc/impress 全量通过 (UI 全隐藏含公式栏, 经验 44); 回归修复: win_platform Plan() impress discover AfterReveal→AfterStart + 核心 P8 discover 分支 (协议遗漏) + NovaOfficeCore PptCoreExport Windows 分发恢复 (被清理误删) + 模板补 calc 基线 (69→126 项, 见 3.1 模板部署保障)
 - UNO_PATH/URE_BOOTSTRAP 依赖部署位置(office/program),部署路径变化需同步(经验 23/33)
 - **旧独立进程方案已清理 (2026-08-17)**:source/ 目录、NovaLibreOfficePlayerDeprecated target、NovaLibreOfficePlayer.vcxproj、PptAnimationManagerLinux/LibreOffice(零实例化, PptCoreExport 全走新链/图片模式)、sln 工程引用、孤儿可执行 全部删除(git 可恢复)。Windows 侧为文本对应清理(CMake/sln/vcxproj),**需 Windows 编译确认**。ShareMemoryReaderLinux/NamePipe* 为 PDF 链/公共设施,保留
@@ -379,8 +379,8 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ## 七、FFplay 嵌入专项 [经验+设计] (updated 2026-08-20)
 
-> ffplay 嵌入引擎 (runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 专项治理。**尺寸链修复/多实例根治 (三个 bug + render_mutex)/静音专项 (C1 UNO 远程调用全链路)/日志专项 (ffplay_<pid>.log + av_log callback)** 见 [design-ffplay.md](design-ffplay.md)。
-> 摘要: ① video_open 尺寸修复 (SDL_GetWindowSize 替代 640x480 硬编码); ② 多实例根治 (audio_dev 下沉 VideoState + render_mutex + per-instance 销毁); ③ 静音 C1 简化版 (XFastPropertySet handle 0 = MUTE_ALL, UNO pipe 跨进程); ④ 日志专项 (spdlog 独立 logger, [FFmpeg/<module>] 前缀, flush_on(info))。
+> ffplay 嵌入引擎 (runtime/ffplay, 补丁式复用 FFmpeg ffplay.c) 专项治理。**尺寸链修复/多实例根治 (三个 bug + render_mutex)/静音专项 (方案 A per-window, UNO 跨进程)/日志专项 (ffplay_<pid>.log + av_log callback)** 见 [ffplay-embed.md](ffplay-embed.md)。
+> 摘要: ① video_open 尺寸修复 (SDL_GetWindowSize 替代 640x480 硬编码); ② 多实例根治 (audio_dev 下沉 VideoState + render_mutex + per-instance 销毁); ③ 静音方案 A (XFastPropertySet per-window 窗口句柄过滤, UNO 跨进程; C1 全局版为其前身); ④ 日志专项 (spdlog 独立 logger, [FFmpeg/<module>] 前缀, flush_on(info))。
 > 关联经验: 34 (补丁纪律: 改 embed.c 必须回填 patch) / 37 (SDL 软件渲染) / 19b (Xvfb 无 GPU) / 28-30 (注入+后端开关)。
 
 ---
