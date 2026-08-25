@@ -64,7 +64,7 @@ void DumpUiState(const css::uno::Reference<css::frame::XFrame>& frame,
 
 // UTF-8 字符串 -> filesystem::path (Windows 走 UTF-16, Linux 直传)。
 // 消除各会话 std::filesystem 调用的 #ifdef _WIN32 u2w(x) 重复 (设计 E 表
-// "to_path 应上收 link_utils 三链共用"; G 缝, design-platform-isolation.md Part 2 G)。
+// "to_path 应上收 link_utils 三链共用"; G 缝, [platform-isolation] Part 2 G)。
 std::filesystem::path to_path(const std::string& utf8);
 
 // LO 文档锁文件检测 (缺陷: 残留 `.~lock.<basename>#` 锁文件 → loadComponentFromURL
@@ -72,7 +72,7 @@ std::filesystem::path to_path(const std::string& utf8);
 // UTF-8 路径, 否则返回空串。用于加载失败时诊断残留锁 (见缺陷报告/经验)。
 std::string GetLockFileIfExists(const std::string& doc_path);
 
-// 内核宿主 (G 缝, design-platform-isolation.md Part 2 G): writer 无 LinkPlatform 层 (经验 38④
+// 内核宿主 (G 缝, [platform-isolation] Part 2 G): writer 无 LinkPlatform 层 (经验 38④
 // 无窗口/无抓帧), 引导缝 (Acquire/BootLock/EnsureKernel vs BootstrapSession)
 // 收进本工具, writer 会话零 #ifdef。calc/impress 走 LinkPlatform 体系, 不用本类。
 //

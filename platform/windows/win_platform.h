@@ -19,7 +19,7 @@ public:
     explicit WindowsPlatform(const char* profile_subdir);
     ~WindowsPlatform() override { Cleanup(); }
 
-    // ---- 平台隔离设计新增接口 (design-platform-isolation.md Part 2 D) ----
+    // ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
     // Plan(): calc/impress 策略按 profile_subdir_ 区分 (文档类型差异数据化)。
     //   impress: 全屏放映 (LO 自管窗口, form=None), settle 2500ms, ui_hide=false
     //   calc: 窗口化 (反序定型 F 用例, discover=form=BeforeReveal), ui_hide=true

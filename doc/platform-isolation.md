@@ -6,6 +6,23 @@
 
 ---
 
+## 0. 代码锚点归位（单点全源）
+
+> 平台隔离知识**本文件唯一承重**；代码注释一律只作锚点（`[platform-isolation]`）。
+> 散落注释知识已按其归属收进本文件上文各节，代码侧仅保留指引。概念 → 代码落点：
+
+| 概念 | 代码落点 | 本文件节 |
+|---|---|---|
+| LinkPlatform 接口契约（Discover/Form/Plan/BeginBoot/HideUiFloats/HideUiExtras） | `platform/link_platform.h` | D + Part3 §3.1 |
+| SessionPlan 数据驱动（`plan_.discover/form/terminate_on_destroy`） | `calc/session.*` · `impress/session.*`（`plan_` 成员；Create 取、Destroy 消费） | C/D/E |
+| P0 平台工厂 + PrepareEnvironment | `calc/session.cpp` `CreateCalcPlatform()` · `impress/session.cpp` `CreateImpressPlatform()` | C(P0) |
+| UI 修补 HideUiExtras 下沉 | P9 后 `platform_->HideUiExtras(...)`；`win_platform.cpp` 实现 / `xvfb_platform.*` 空实现 | Part3 §3.1 |
+| writer 引导缝 G（KernelHost, 零 #ifdef） | `base/link_utils.h` · `writer/session.cpp` | G |
+| to_path/u2w 机制上收（双平台） | `base/link_utils.h` | E |
+| 平台机制实现（差异的家） | `platform/linux/xvfb_platform.*` · `platform/windows/win_platform.*` | A/B/E |
+
+---
+
 ## 平台隔离设计(意图/机制分离)— 已实施 2026-08-18 (J1-J4 全量)
 
 > 背景: 双平台并行开发负担重。UNO 层大体一致(实证: writerlink 零平台层双平台可用),

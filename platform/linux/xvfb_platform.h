@@ -65,7 +65,7 @@ public:
     XvfbSessionPlatform(const WindowMatchRule& rule, const char* tag);
     ~XvfbSessionPlatform() override { Cleanup(); }
 
-    // ---- 平台隔离设计新增接口 (design-platform-isolation.md Part 2 D) ----
+    // ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
     SessionPlan Plan() override;
     std::unique_ptr<BootSection> BeginBoot() override;
     bool DiscoverWindow() override;

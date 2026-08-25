@@ -141,7 +141,7 @@ void HideFullScreenFloat(DWORD pid) {
 WindowsPlatform::WindowsPlatform(const char* profile_subdir)
     : profile_subdir_(profile_subdir) {}
 
-// ---- 平台隔离设计新增接口 (design-platform-isolation.md Part 2 D) ----
+// ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
 namespace {
 // Windows 引导段空实现 (每 session 独立 soffice 进程, 无共享内核串行需求, 经验 5
 // 不适用 Windows; 与 Linux LinuxBootSection 对称, Release() no-op)

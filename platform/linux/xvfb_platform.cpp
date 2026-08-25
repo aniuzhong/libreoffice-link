@@ -207,7 +207,7 @@ bool GrabBgra(Display* d, Window w, std::vector<uint8_t>& out, int& ow, int& oh,
 
 }  // namespace
 
-// ---- LinuxBootSection (平台隔离设计: design-platform-isolation.md Part 2 D) ----
+// ---- LinuxBootSection (平台隔离设计: [platform-isolation] Part 2 D) ----
 // BootLock 构造函数本身即 Lock() (office_runtime.cpp BootLock::BootLock),
 // 成员构造时已持锁 —— 此处再调 Lock() 会同线程二次 lock 非递归 s_proc_mutex,
 // 立即自死锁 (2026-08-18 探针卡死根因, 经验 43)。
@@ -276,7 +276,7 @@ bool ShmState::Ensure(Display* d, Window win, int width, int height) {
 XvfbSessionPlatform::XvfbSessionPlatform(const WindowMatchRule& rule, const char* tag)
     : rule_(rule), tag_(tag) {}
 
-// ---- 平台隔离设计新增接口 (design-platform-isolation.md Part 2 D) ----
+// ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
 SessionPlan XvfbSessionPlatform::Plan() {
     // 文档类型差异数据化: Tag() == "calc"/"impress" (构造参数)
     // Linux 共通 (经验 1/26/27): 共享内核 → terminate_on_destroy=false;

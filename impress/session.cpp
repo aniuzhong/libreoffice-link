@@ -1,5 +1,5 @@
 // impress_session.cpp — Impress 会话实现。
-// 平台隔离设计 (design-platform-isolation.md Part 2): 意图/机制分离, 会话层零 #ifdef。
+// 平台隔离设计 ([platform-isolation] Part 2): 意图/机制分离, 会话层零 #ifdef。
 // 流程来自 xvfb_calc_demo/impress_probe.cpp 的验证结论 (Linux):
 //   共享内核 (office_runtime) -> Hidden 加载 pptx -> 控制器窗口可见 ->
 //   窗口化幻灯片 (IsFullScreen=false, LO 自铺满屏) -> 平台层缩窗进 slot ->
@@ -116,7 +116,7 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
         return false;
     }
 
-    // P0: 平台工厂 + PrepareEnvironment (平台隔离设计: design-platform-isolation.md Part 2 C)
+    // P0: 平台工厂 + PrepareEnvironment (平台隔离设计: [platform-isolation] Part 2 C)
     std::string linkDir = platform_->GetLinkDir();
     platform_->PrepareEnvironment(linkDir, guid ? guid : "");
 

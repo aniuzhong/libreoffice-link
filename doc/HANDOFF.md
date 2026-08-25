@@ -5,7 +5,7 @@
 > 经验编号被代码注释引用,**编号只增不改**;每次认知提升更新"二、经验"(带时间+置信度),完成事项移入"一、现状"。
 >
 > **分层阅读 (2026-08-20 重构)**: 本文件 = Core(每次必读: 现状/沙箱运行策略/经验索引/漏洞/待办);
-> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[design-platform-isolation.md](design-platform-isolation.md)(平台隔离)/[framepump.md](framepump.md)(帧泵)/[ffplay-embed.md](ffplay-embed.md)(FFplay 嵌入专项)。
+> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[platform-isolation.md](platform-isolation.md)(平台隔离)/[framepump.md](framepump.md)(帧泵)/[ffplay-embed.md](ffplay-embed.md)(FFplay 嵌入专项)。
 
 ---
 
@@ -17,7 +17,7 @@
 | **TRAE sandbox 限制/跑前清场/并行会话互踩** | **[1.4 沙箱运行策略](#14-沙箱运行策略必读)** |
 | 项目架构/关键路径/当前状态 | 一、项目现状 |
 | 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42 详述+失效条件+零引用清单) |
-| 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [design-platform-isolation.md](design-platform-isolation.md) |
+| 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [platform-isolation.md](platform-isolation.md) |
 | FramePump 设计决策/性能预算/测试矩阵 | [framepump.md](framepump.md) |
 | **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [defect-impress-bleed-through.md](defect-impress-bleed-through.md) |
 | ffplay 尺寸链/多实例根治/静音/日志 | [ffplay-embed.md](ffplay-embed.md) |
@@ -207,7 +207,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | 19c | 会话重建不做:确定性故障重建仍崩;改为崩溃检测+明确告警 | 08-12 | 高 |
 | 41 | **Impress 暂停→恢复翻页失效**:pause/resume 不对称 + StartPoller early-return 致 paused_ 不重置。FramePump 接入后同构复现 (泵 Start 幂等早返未重置 paused_), 已由泵契约根治。[详述](experiences.md) | 08-18 | 高(实测修复) |
 | 42 | **FramePoller 共性分析与治理**:三 link poller 六维不一致 + P3-P8 新发现。FramePump 组件统一帧泵, 阶段0-4 全部落地, 三链接入收官。[详述](experiences.md) | 08-18 | 高(阶段0-4全部完成) |
-| 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 doc/design-platform-isolation.md Part 1 | 08-18 | 高(源码级+实测修复) |
+| 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 [platform-isolation.md](platform-isolation.md) Part 1 | 08-18 | 高(源码级+实测修复) |
 | 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 —— UI 验证以 demo 为准。**排查纪律**: UNO_SILENT 异常进 debug 级日志, "静默失败"排查第一动作开 ORT_LOG_LEVEL=debug 看 `UNO exception (silent)` 痕迹。**[2026-08-19 4.2 实证修正]**: InputLineVisible dispatch 在 Linux 共享内核下破坏 vis=0 初始态导致 UI 复活, 已下沉至 Windows HideUiExtras (Linux 空操作); LO Xvfb 无头环境公式栏默认 vis=0 不显示, 无需 dispatch | 08-18 | 高(实测, 部分认知已修正) |
 | 45 | **C ABI 重复 Destroy UAF 防护 (V4 双层防护已补全)**: C ABI `ImpressSessionDestroy` / `CalcSessionDestroy` 直接 `delete static_cast<...*>(session)`, 重复调用时悬垂指针 → use-after-free → SIGABRT (确定性必现)。修复: `SessionRegistry` (recursive_mutex + live 集合), `Register`/`TryRevoke`/`Guard`/`WithGuard` 回调式守卫。**V4 补全 (2026-08-20)**: `Guard` 拦截销毁后所有 API 调用 + `AbiCall` 异常边界 + 会话内 `destroyed_` 标志。**WithGuard 重构 (2026-08-20)**: 消除重复 `Guard g + if(!g)` 模式, 三 link 统一回调式。失效条件: 改用智能指针管理 session 生命周期时本防护可移除 | 08-20 | 高(已修复, V4 实证全绿) |
 
@@ -283,7 +283,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ### 3.0 平台隔离设计验证 — 已闭环 (2026-08-18)
 
-> 全文(目的达成评估 6 项核验)见 [design-platform-isolation.md](design-platform-isolation.md) Part 1。
+> 全文(目的达成评估 6 项核验)见 [platform-isolation.md](platform-isolation.md) Part 1。
 > 关键沉淀: 经验 43 (BootLock 死锁根因) / 设计规格 (同文件 Part 2) / Windows 回归 (commit 5832a507)。
 > 摘要: 会话层零逻辑 `#ifdef` ✅ / 平台差异全落平台层 ✅ / 变体点 SessionPlan 可枚举 ✅ / Windows 编译+探针+demo 全过 ✅; 诚实边界: 无 Windows CI, FramePump 待 Windows 侧确认。
 
@@ -311,14 +311,14 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ### 3.3 平台隔离设计(意图/机制分离)— 已实施 2026-08-18 (J1-J4 全量)
 
-> **全文** (三原则/两类差异判定/P0-P10 会话协议/LinkPlatform 接口定稿/变体点总账/calc Win 反序用例/writer 引导缝/知识安居铁律/三层保证/J 迁移路径/反模式) 见 [design-platform-isolation.md](design-platform-isolation.md) Part 2。
+> **全文** (三原则/两类差异判定/P0-P10 会话协议/LinkPlatform 接口定稿/变体点总账/calc Win 反序用例/writer 引导缝/知识安居铁律/三层保证/J 迁移路径/反模式** 见 [platform-isolation.md](platform-isolation.md) Part 2。
 > 一句话: 会话层零 `#ifdef`, 平台差异收进 SessionPlan 数据 + LinkPlatform 接口 (P0-P10 里程碑协议), 分歧不可消除但可以安放。
 
 ---
 
 ## 四、平台隔离专项 [设计+经验] (updated 2026-08-19)
 
-> 深度内容 (UI 隐藏隔离根因 4 组对照实验/HideUiExtras 下沉/6 次探针实证/模板隔离评估) 见 [design-platform-isolation.md](design-platform-isolation.md) Part 3。
+> 深度内容 (UI 隐藏隔离根因 4 组对照实验/HideUiExtras 下沉/6 次探针实证/模板隔离评估) 见 [platform-isolation.md](platform-isolation.md) Part 3。
 
 ### 4.1 隔离边界总账
 

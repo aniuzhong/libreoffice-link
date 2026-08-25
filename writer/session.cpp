@@ -99,7 +99,7 @@ bool WriterSession::Create(const char* path, const char* password, const char* g
     target_w_ = width > 0 ? width : link_utils::kDefaultWidth;
     target_h_ = height > 0 ? height : link_utils::kDefaultHeight;
 
-    // G 缝 (design-platform-isolation.md Part 2 G): 引导缝收进 link_utils::KernelHost,
+    // G 缝 ([platform-isolation] Part 2 G): 引导缝收进 link_utils::KernelHost,
     // writer 会话零 #ifdef (Linux: Acquire+BootLock+EnsureKernel; Win: BootstrapSession)。
     kernel_host_ = std::make_unique<link_utils::KernelHost>("writerlink", guid ? guid : "");
     kernel_host_->BeginBoot();

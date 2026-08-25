@@ -1,4 +1,4 @@
-// kernel_host.cpp (Windows) — KernelHost 实现 (G 缝, design-platform-isolation.md Part 2 G)。
+// kernel_host.cpp (Windows) — KernelHost 实现 (G 缝, [platform-isolation] Part 2 G)。
 // Windows: 每 session 独立 soffice 三参 bootstrap (自引导缝)。
 // 声明在 base/link_utils.h; 实现按平台归位 (平台差异的家, HANDOFF 3.3 三原则)。
 #include <base/link_utils.h>    // KernelHost 类声明 + GetLinkDir/BootstrapSession/to_path

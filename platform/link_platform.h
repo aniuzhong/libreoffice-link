@@ -5,7 +5,7 @@
 // Windows = 每 session 独立 soffice 进程 + 独立桌面 (CreateDesktop,
 // calc/impress 共用 WindowsPlatform, 经验 39 补齐)。
 //
-// 平台隔离设计 (design-platform-isolation.md Part 2): 意图/机制分离, 会话层零 #ifdef。
+// 平台隔离设计 ([platform-isolation] Part 2): 意图/机制分离, 会话层零 #ifdef。
 #pragma once
 
 #include <cstdint>
@@ -44,7 +44,7 @@ class LinkPlatform {
 public:
     virtual ~LinkPlatform() = default;
 
-    // ---- 平台隔离设计新增接口 (design-platform-isolation.md Part 2 D) ----
+    // ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
     // 平台策略声明 (数据, 非代码): 启动时一次性取, 核心原样消费并打日志
     virtual SessionPlan Plan() = 0;
     

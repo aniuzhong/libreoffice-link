@@ -55,7 +55,7 @@ using namespace css::sheet;
 using link_utils::u2s;
 using link_utils::s2u;
 
-// 平台隔离设计 (design-platform-isolation.md Part 2): 会话层零 #ifdef。
+// 平台隔离设计 ([platform-isolation] Part 2): 会话层零 #ifdef。
 // 引导+文档加载串行 (经验 5) 由 platform_->BeginBoot() RAII 承担
 // (Linux: office_runtime BootLock; Windows: 空实现), 会话层不直接依赖
 // office_runtime。窗口查找/落位由 plan 数据驱动 (DiscoverWindow/FormWindow)。
@@ -185,7 +185,7 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
 
     OfficeLog("[CalcLink] Create begin this=%p path=%s", (void*)this, path ? path : "null");
 
-    // P0: 平台工厂 + PrepareEnvironment (平台隔离设计: design-platform-isolation.md Part 2 C)
+    // P0: 平台工厂 + PrepareEnvironment (平台隔离设计: [platform-isolation] Part 2 C)
     platform_ = std::unique_ptr<LinkPlatform>(CreateCalcPlatform());
     if (!platform_) {
         OfficeLogErr("[CalcLink] CreateCalcPlatform failed");

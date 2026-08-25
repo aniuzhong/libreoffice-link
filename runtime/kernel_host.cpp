@@ -1,4 +1,4 @@
-// kernel_host.cpp (Linux) — KernelHost 实现 (G 缝, design-platform-isolation.md Part 2 G)。
+// kernel_host.cpp (Linux) — KernelHost 实现 (G 缝, [platform-isolation] Part 2 G)。
 // Linux: 共享内核引导缝 (OfficeRuntime::Acquire/BootLock/EnsureKernel)。
 // 声明在 base/link_utils.h; 实现按平台归位 (平台差异的家, HANDOFF 3.3 三原则)。
 // writer 无 LinkPlatform 层 (经验 38④), calc/impress 走 LinkPlatform 体系不用本类。
