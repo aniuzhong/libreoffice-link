@@ -70,16 +70,16 @@ void ImpressSession::Destroy() {
                 OfficeLogDbg("[ImpressLink] close component failed: %s", u2s(e.Message).c_str());
             }
         }
-        
+
         // 平台隔离设计: terminate 按 plan_.terminate_on_destroy 门控 (数据驱动)
         // Windows 每 session 独立 soffice 进程须 terminate 退出; Linux 共享内核不 terminate
         if (plan_.terminate_on_destroy && desktop_.is())
             desktop_->terminate();
-        
+
         // 平台隔离设计: OnSessionEnd 钩子 (当前空; 平台级会话结束清理扩展点)
         if (platform_)
             platform_->OnSessionEnd();
-        
+
         component_.clear();
         controller_.clear();
         frame_.clear();
@@ -210,9 +210,9 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
         pps->setPropertyValue("UsePen", Any(false));
         presentation_ = Reference<css::presentation::XPresentation2>(pres, UNO_QUERY);
         presentation_->start();
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(plan_.settle_ms));
-        
+
         slideshow_ = presentation_->getController();
         if (!slideshow_.is()) {
             OfficeLogErr("[ImpressLink] no slide show controller");
@@ -229,7 +229,7 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
 
     // P8: [W@AfterStart] 绑定点 — plan.discover / plan.form 各自独立消费
     // (协议 Part 2 C: impress/Win discover=AfterStart 发现放映窗口 (start 后创建,
-    //   SALTMPSUBFRAME); impress/Linux form=AfterStart slot 落位; 
+    //   SALTMPSUBFRAME); impress/Linux form=AfterStart slot 落位;
     //   Windows 探针实测: 缺 discover 分支则 hwnd_ 空 -> 抓帧 0 帧)
     if (plan_.discover == WindowPoint::AfterStart) {
         if (!platform_->DiscoverWindow()) {

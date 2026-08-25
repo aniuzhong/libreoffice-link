@@ -201,7 +201,7 @@ void HideUiBlock(const css::uno::Reference<css::frame::XDispatchProvider>& prov,
         OfficeLogDbg("[Common.UIHide] no XTopWindow on container window");
     }
     // 3. LayoutManager 隐藏全部 UI 元素 (menubar + 工具栏 + 状态栏 + Sidebar,
-    //    含 Impress 绘图工具栏 drawbar 与属性面板 PropertiesDeck —— 
+    //    含 Impress 绘图工具栏 drawbar 与属性面板 PropertiesDeck ——
     //    实测这两项残留, 此前只隐藏 menubar; 不依赖 user 配置)
     Reference<css::frame::XLayoutManager> lm(
         factory->createInstanceWithContext("com.sun.star.frame.LayoutManager", ctx), UNO_QUERY);

@@ -70,7 +70,7 @@ public:
     bool FormWindow(int w, int h) override;
     void ApplyNativeFullscreen() override {}  // Linux 无快捷键注入需求
     void OnSessionEnd() override {}          // Linux 共享内核, 无 terminate 需求
-    
+
     // ---- 原有接口 (保持兼容) ----
     std::string GetLinkDir() override;
     std::string GetProfileDir(const std::string& guid) override;

@@ -43,10 +43,10 @@ public:
     // ---- 平台隔离设计新增接口 ([platform-isolation] Part 2 D) ----
     // 平台策略声明 (数据, 非代码): 启动时一次性取, 核心原样消费并打日志
     virtual SessionPlan Plan() = 0;
-    
+
     // 引导段 RAII: 构造 = 进入串行区, Release() = 核心在 setVisible(P5) 之后显式调用
     virtual std::unique_ptr<BootSection> BeginBoot() = 0;
-    
+
     // 契约样例 (接口注释写时机与不变量, 平台实现者读合同不读对端代码):
     // DiscoverWindow: 在 plan.discover 绑定点被调; 须已 SnapshotWindows。
     // FormWindow: 在 plan.form 绑定点被调; **放映运行中的窗口几何操作只允许
@@ -56,7 +56,7 @@ public:
     virtual bool FormWindow(int w, int h) = 0;   // 吸收 SizeWindowToSlot
     virtual void ApplyNativeFullscreen() = 0;    // 能力钩子, 默认空 (Win 快捷键注入)
     virtual void OnSessionEnd() = 0;             // 能力钩子 (Win terminate; Linux 空)
-    
+
     // ---- 原有接口 (保持兼容) ----
     // 本 link 所在目录 (== soffice program dir when deployed)。
     virtual std::string GetLinkDir() = 0;
