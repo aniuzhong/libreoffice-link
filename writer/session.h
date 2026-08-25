@@ -1,14 +1,5 @@
-// writer_session.h — Writer 会话 (自治 PDF 位图管线, 经验 38)。
-// 链路: 共享内核 → PDF(缓存协同: writer_cache → NPOfficeCache → 自转)
-//   → draw_pdf_Import → XSlideRenderer::createPreview 逐页位图 → BMP 解析
-//   → BGRA 帧回调。无平台层 (LinkPlatform)/无窗口/无 slot/无抓帧 —
-//   writer 是静态排版内容, 离屏位图模型 (经验 38 落地决策④)。
-// Windows 差异 (经验 39): 三参 bootstrap (link_utils::BootstrapSession, 桌面名
-//   为空=离屏) + 原生文件操作宽路径 (U2W, 中文路径) + Destroy terminate
-//   独立 soffice + 链 common (共享工具, 平台层不落地)。
-// 会话状态机 (V4 治理, HANDOFF 七): created_(PDF 就绪) -> destroyed_(终态)。
-// 公开方法入口判 destroyed_, 销毁后调用一律 no-op; C ABI 层另有
-// SessionRegistry 入口守卫 (common/session_registry.h) 双层防护。
+// writer_session.h — Writer 会话 (自治 PDF 位图管线, 经验 38): 离屏位图模型, 无平台层。
+// 链路(缓存协同/导入/渲染/BMP)、Windows 差异与状态机(V4)契约见 [experiences] 经验38/39、[HANDOFF] 八。
 #pragma once
 
 #include <atomic>

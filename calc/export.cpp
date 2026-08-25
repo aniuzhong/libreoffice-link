@@ -1,17 +1,5 @@
-// calclink.cpp — C ABI 导出: 会话生命周期/播放控制/翻页/查询。
-// 会话实现见 calc_session.cpp。
-//
-// V4 修复 (, HANDOFF 七、已知漏洞): 会话生命周期外部状态机由
-// SessionRegistry 建模 (在册=live / 不在册=destroyed)。所有 ABI 入口经
-// Guard 校验在册才转发 — 销毁后调用任意 API 一律 no-op, 不触碰已释放
-// 内存; Guard 持锁期间 Destroy 的注销+delete 阻塞等待, 消除 TOCTOU。
-// 会话内 destroyed_ 标志为第二层防护。经验 45 (重复 Destroy) 由
-// TryRevoke 原有语义承接。
-//
-// ABI 异常边界 (V4 入口守卫第二要素): 所有导出函数体经 AbiCall 包裹,
-// C++ 异常 (UNO 竞态抛出的 RuntimeException/IllegalArgumentException 等)
-// 不得逃逸 C ABI — 逃逸会 std::terminate → SIGABRT (attack_uaf_probe
-// UAF-1 实证)。
+// calclink.cpp — C ABI 导出: 会话生命周期/播放控制/翻页/查询。会话实现见 calc_session.cpp。
+// ABI 生命周期守卫 (V4 SessionRegistry/Guard) 与异常边界见 [HANDOFF] 八、[experiences] 经验45。
 #include "session.h"
 
 #include <base/abi.h>

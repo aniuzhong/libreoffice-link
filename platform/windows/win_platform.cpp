@@ -1,7 +1,5 @@
 // win_platform.cpp — Windows 平台实现 (独立进程模式, 见 win_platform.h)。
-// 迁移自 calc/windows/calc_platform.cpp (机械改名 GetCalclinkDir->GetLinkDir,
-// FindCalcWindow->FindWindow + profile 子目录参数化);  平台归位:
-// profile seed 与三参 bootstrap 从 calc_session 会话层下沉本实现 (经验 38④)。
+// profile seed 与三参 bootstrap 自会话层下沉本实现 (经验 38④); 迁移来历见 [platform-isolation] §E。
 #include "win_platform.h"
 
 #include <Shlwapi.h>

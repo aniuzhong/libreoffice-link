@@ -1,9 +1,5 @@
-// xvfb_platform.h — Linux 平台实现 (Xvfb 共享内核模式): office_runtime
-// (Xvfb + 共享 LO 内核 + slot) + 窗口查找/落位/缩窗 + XShm 抓帧。
-// 单类 + 规则参数化 (文档类型差异 = 数据), 不再需要子类:
-//   XvfbSessionPlatform(WindowMatchRule, tag) — calc/impress 共用;
-//   MatchWindow 保留为 virtual (默认走规则), 作为未来类型特有逻辑的扩展点。
-// 迁移自 calc/linux/calc_platform.cpp (原 calc/impress 两份 77% 重复的公共侧)。
+// xvfb_platform.h — Linux 平台实现 (Xvfb 共享内核模式): office_runtime(内核+slot) + 窗口查找/落位/缩窗 + XShm 抓帧。
+// 设计(单类+规则参数化/迁移来历)见 [platform-isolation] §E; MatchWindow 虚函数为类型特有逻辑扩展点。
 #pragma once
 
 // 注: link_platform.h 必须先于 <X11/Xlib.h> — X11 的 `None` 宏会与

@@ -1,15 +1,5 @@
-// writerlink.cpp — C ABI 导出 (与 calclink/impresslink 同构): 会话生命
-// 周期/播放控制/翻页/查询。会话实现见 writer_session.cpp (经验 38)。
-//
-// V4 修复 (, HANDOFF 七、已知漏洞): 所有 ABI 入口经
-// SessionRegistry::Guard 校验在册才转发 — 销毁后调用任意 API 一律 no-op,
-// 不触碰已释放内存; Guard 持锁期间 Destroy 的注销+delete 阻塞等待。
-// 会话内 destroyed_ 标志为第二层防护。经验 45 (重复 Destroy) 由
-// TryRevoke 原有语义承接 (writer 此前完全无防护, 本次补齐)。
-//
-// ABI 异常边界 (V4 入口守卫第二要素): 所有导出函数体经 AbiCall 包裹,
-// C++ 异常不得逃逸 C ABI (逃逸 → std::terminate → SIGABRT, calclink
-// attack_uaf_probe UAF-1 同类实证)。
+// writerlink.cpp — C ABI 导出 (与 calclink/impresslink 同构): 会话生命周期/播放控制/翻页/查询。会话实现见 writer_session.cpp (经验 38)。
+// ABI 生命周期守卫 (V4 SessionRegistry/Guard) 与异常边界见 [HANDOFF] 八、[experiences] 经验45。
 #include "session.h"
 
 #include <base/abi.h>

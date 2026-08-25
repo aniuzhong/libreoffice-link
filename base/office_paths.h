@@ -1,10 +1,10 @@
-// office_paths.h — .office-link 路径命名空间统一 ( 双平台整合)。
+// office_paths.h — .office-link 路径命名空间统一 (双平台整合)。
 // 此前路径拼接散落 4 个文件 (office_runtime/xvfb_platform/win_platform/
 // writer_session) 各自 getenv/SHGetFolderPath, Windows 侧基目录分裂
 // (profile 用 Roaming, 日志/缓存用 Local)。
 // 本模块为纯函数 header-only: office_runtime 不链 common (经验 32), inline
 // 实现零链接依赖, 任何调用方 include 即用 —— 单点持有基目录决策与子路径派生。
-// 决策 ( 定稿):
+// 决策 (定稿):
 //   - Linux 基目录保持 ~/.office-link (fallback /tmp/.office-link): 零迁移
 //     成本, 已部署机器日志/缓存/内核 profile 不失效; 播放器为固定部署环境,
 //     不引入 XDG 迁移

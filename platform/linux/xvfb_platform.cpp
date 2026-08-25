@@ -1,7 +1,5 @@
 // xvfb_platform.cpp — Linux 平台实现 (Xvfb 共享内核模式)。
-// 迁移自 calc/linux/calc_platform.cpp 与 impress/linux/impress_platform.cpp 的
-// 公共侧 (两版 77% 重复), 文档类型差异由规则参数化表达。日志前缀统一走
-// OfficeLog("[<tag>] ..."), tag 由构造传入。
+// 日志前缀统一走 OfficeLog("<tag> ..."), tag 由构造传入; 设计/来历见 [platform-isolation] §E。
 #include "xvfb_platform.h"
 
 #include <dlfcn.h>
