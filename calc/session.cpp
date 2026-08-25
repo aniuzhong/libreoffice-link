@@ -55,11 +55,7 @@ using namespace css::sheet;
 using link_utils::u2s;
 using link_utils::s2u;
 
-// 平台隔离设计 ([platform-isolation] Part 2): 会话层零 #ifdef。
-// 引导+文档加载串行 (经验 5) 由 platform_->BeginBoot() RAII 承担
-// (Linux: office_runtime BootLock; Windows: 空实现), 会话层不直接依赖
-// office_runtime。窗口查找/落位由 plan 数据驱动 (DiscoverWindow/FormWindow)。
-
+// 平台隔离设计 ([platform-isolation] Part2): 会话层零 #ifdef, 引导/加载/窗口落位由平台层承担。
 // ---------------------------------------------------------------------------
 
 CalcSession::CalcSession() = default;
@@ -320,17 +316,10 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
                                 frame_, factory, ctx_);
     }
 
-    // 平台特定的 UI 修补 (平台隔离设计: 公式栏等平台专属 UI 处理由平台实现自决)。
-    // Linux: LO Xvfb 无头环境 UI 默认 vis=0, HideUiExtras 空操作;
-    // Windows: InputLineVisible dispatch 等 (win_platform.cpp HideUiExtras)。
+    // UI 修补 (公式栏等) 由平台实现自决, 见 [platform-isolation] §3.1
     platform_->HideUiExtras(frame_, factory, ctx_);
 
-    // 阶段4: 初始化 FramePump (统一帧泵, 替代原 poll_thread_/paused_/force_frame_)
-    // calc 策略: probe=视口签名+force_frame_脏位 (CheckViewportChanged 持 mu_),
-    //   heartbeat=100ms (静态 xlsx 取帧模式需要帧流, 经验 38),
-    //   hbp=true (Pause 照推心跳, 与原 PollThread 一致: 心跳判定无 paused_ 门控),
-    //   tick=20ms (放宽原 5ms full-speed, 五、帧泵专项 5.2 性能预算 50 唤醒/s),
-    //   backoff=200ms
+    // 阶段4: 初始化 FramePump (calc 策略参数见 [experiences] 经验42 表 / [framepump] §0)
     {
         FramePumpPlan pp;
         pp.tick_ms = 20;
