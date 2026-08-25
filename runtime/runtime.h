@@ -1,13 +1,5 @@
-// runtime.h — 进程级共享 LibreOffice 运行时 (Linux 共享内核模式)
-// 管理: Xvfb 虚拟屏 / LO 共享内核 / 大屏 Slot 分区。
-// 生命周期强耦合 (LO 依赖 Xvfb 显示, slot 属于 Xvfb 大屏), 合并管理:
-// 首个文档 session Acquire 时创建全部; Xvfb/内核为进程级存活 (末个 Release
-// 仅计数归零, 不销毁)。退出清理: Xvfb 由 atexit 回调清理 (仅本进程自起的);
-// LO 内核进程断管道自退, 残留由下次 Acquire 的 CleanupOrphanSoffice 兜底。
-// 供 calclink/impresslink/writerlink 共用; 媒体后端子模块
-// ffplay 为独立组件 (不依赖本运行时核心)。
-// Windows 为每 session 独立 soffice 进程 + 独立桌面, 无进程级共享需求,
-// 不参与本模块。若未来 Windows 引入共享内核, 再按平台分层。
+// runtime.h — 进程级共享 LibreOffice 运行时 (Linux 共享内核模式): Xvfb 大屏 / LO 共享内核 / Slot 分区。
+// 生命周期语义 (合并管理/进程级存活/清理链/Windows 边界) 见 [HANDOFF] 1.5、经验 10/22/27。
 #pragma once
 
 #include <semaphore.h>

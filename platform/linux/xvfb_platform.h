@@ -6,18 +6,20 @@
 // 迁移自 calc/linux/calc_platform.cpp (原 calc/impress 两份 77% 重复的公共侧)。
 #pragma once
 
+// 注: link_platform.h 必须先于 <X11/Xlib.h> — X11 的 `None` 宏会与
+// WindowPoint::None 冲突 (link_platform.h 内枚举在 X11 之后会被宏展开)。
 #include <cstdint>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+#include <platform/link_platform.h>
+#include <runtime/runtime.h> // OfficeRuntime (Xvfb/内核/slot)
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/XShm.h>
-
-#include <platform/link_platform.h>
-#include <runtime/runtime.h> // OfficeRuntime (Xvfb/内核/slot)
 
 // 窗口树扫描结果 (匹配规则与 MatchWindow 的输入)
 struct WinInfo {
