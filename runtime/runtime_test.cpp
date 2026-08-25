@@ -13,6 +13,9 @@
 // 用法: office_runtime_test [场景...|--stress N]   默认全部; 任一失败退出码非 0。
 #include "runtime.h"
 
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <semaphore.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -21,16 +24,12 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <fcntl.h>
-#include <semaphore.h>
 
 #include <X11/Xlib.h>
 

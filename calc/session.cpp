@@ -5,30 +5,30 @@
 #include <thread>
 #include <vector>
 
-#include "link_utils.h" // u2s/s2u/HideUiBlock (公共会话工具, 经验 32 平台归组)
-#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
-
-#include <osl/file.hxx>
-#include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/util/URL.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/sheet/XViewFreezable.hpp>
+#include <com/sun/star/frame/FrameSearchFlag.hpp>
+#include <com/sun/star/frame/XComponentLoader.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
+#include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XLayoutManager.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XViewFreezable.hpp>
 #include <com/sun/star/table/CellRangeAddress.hpp>
+#include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
+#include <osl/file.hxx>
+
+#include "link_utils.h" // u2s/s2u/HideUiBlock (公共会话工具, 经验 32 平台归组)
+#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
 
 #ifdef _WIN32
 #include <windows.h>

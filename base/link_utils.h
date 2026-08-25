@@ -8,10 +8,10 @@
 #include <memory>
 #include <string>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <rtl/ustring.hxx>
 
 namespace link_utils {

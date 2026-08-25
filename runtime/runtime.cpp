@@ -1,16 +1,16 @@
 // office_runtime.cpp — 进程级共享 LibreOffice 运行时 (Linux 共享内核模式):
 // LO 内核 + Xvfb + Slot 分区 (由 calc_session/xvfb_platform 归组, 经验 32)。
 #include "runtime.h"
-#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
-#include "../third_party/scope_guard.hpp" // DEFER: C 资源清理 (XCloseDisplay/munmap/close)
 
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <signal.h>
+#include <sys/file.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -19,30 +19,29 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <fcntl.h>
-#include <sys/time.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <sstream>
-#include <sys/file.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <thread>
 
-#include <cppuhelper/bootstrap.hxx>
-#include <com/sun/star/frame/XDesktop.hpp>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <com/sun/star/bridge/UnoUrlResolver.hpp>
 #include <com/sun/star/connection/NoConnectException.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
+#include <cppuhelper/bootstrap.hxx>
 #include <osl/file.hxx>
 #include <osl/process.h>
 #include <osl/security.hxx>
 #include <rtl/bootstrap.hxx>
-
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/spdlog.h>
+
+#include "../third_party/scope_guard.hpp" // DEFER: C 资源清理 (XCloseDisplay/munmap/close)
+#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
 
 namespace {
 

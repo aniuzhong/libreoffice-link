@@ -1,16 +1,17 @@
 // ffplay_manager.cxx — Manager_FFPlay 组件 (注入 + 静音 + 日志, service:
 // com.sun.star.comp.avmedia.Manager_FFPlay)。注入机制见 [ffplay-embed] §1,
 // 静音方案 A 见 §7, 日志见 §8。
-#include <com/sun/star/media/XManager.hpp>
+#include <cstdio>
+
 #include <com/sun/star/beans/XFastPropertySet.hpp>
+#include <com/sun/star/media/XManager.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase2.hxx>
-#include <cstdio>
-#include <uno/lbnames.h>
 #include <uno/environment.h>
+#include <uno/lbnames.h>
 
-#include "ffplay_player.hxx"
 #include "ffplay_log.h"  // FFLOG_* + Init() (注册 av_log callback)
+#include "ffplay_player.hxx"
 
 using namespace css;
 using namespace css::uno;

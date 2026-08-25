@@ -6,20 +6,20 @@
 #include <mutex>
 #include <string>
 
-
-#include <base/abi.h>
-#include "link_platform.h"
-#include <base/frame_pump.h>  // 阶段4: 统一帧泵 (替代 poll_thread_/paused_/force_frame_)
-
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/sheet/XViewPane.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/sheet/XSpreadsheetView.hpp>
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
+#include <com/sun/star/sheet/XViewPane.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
+
+#include <base/abi.h>
+#include <base/frame_pump.h>  // 阶段4: 统一帧泵 (替代 poll_thread_/paused_/force_frame_)
+
+#include "link_platform.h"
 
 // 会话状态机 (V4 治理, HANDOFF 七、已知漏洞): UNO 就绪 -> started_(帧泵
 // 运行) -> destroyed_(终态)。所有公开方法入口判 destroyed_, 销毁后调用一律

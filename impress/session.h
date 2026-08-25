@@ -7,18 +7,18 @@
 #include <string>
 #include <thread>
 
-#include <base/abi.h>
-#include "link_platform.h"
-#include "frame_pump.h"
-
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/presentation/XPresentation2.hpp>
 #include <com/sun/star/presentation/XSlideShowController.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
+
+#include <base/abi.h>
+#include "frame_pump.h"
+#include "link_platform.h"
 
 // Impress 会话 (与 CalcSession 同构): 引导 -> Hidden 加载 pptx -> XPresentation2
 // 放映 -> 轮询抓帧。放映形态: Linux 窗口化 + slot 缩窗 (全屏会占据 Xvfb 大屏,

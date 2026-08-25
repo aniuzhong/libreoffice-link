@@ -4,8 +4,8 @@
 // 经验 38 落地决策③)。仅用于内容寻址, 非安全用途。
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 // 计算 data 的 MD5 (32 位小写十六进制)

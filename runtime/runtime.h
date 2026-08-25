@@ -10,17 +10,18 @@
 // 不参与本模块。若未来 Windows 引入共享内核, 再按平台分层。
 #pragma once
 
-#include <mutex>
 #include <semaphore.h>
+
+#include <mutex>
 #include <string>
 #include <vector>
+
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 // ---- 统一日志 (声明见 ../common/log.h; Linux 实现唯一在 office_runtime.so
 // 单例, Windows 实现 common/win_office_log.cpp, 经验 39) ----
 #include <base/log.h>
-
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 // 虚拟屏分区配置 (首个 Acquire 定屏, 后续须一致)。
 // 调用者只需知道两个数: 最大并发文档数 + 每文档最大分辨率。

@@ -1,8 +1,8 @@
 // frame_pump.cpp — 三链统一帧泵实现 (经验 42 治理)
 #include "frame_pump.h"
 
-#include <cstdio>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 FramePump::FramePump(const char* tag, FramePumpPlan plan, FrameFn frame, ChangeFn changed)

@@ -26,15 +26,15 @@
 #undef FindWindow
 #endif
 
-#include <base/link_utils.h> // GetLinkDir/BootstrapSession (三参 bootstrap 统一)
-#include <base/office_paths.h> // .office-link 路径统一 (基目录/子路径派生)
-#include <base/log.h>
-
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/frame/FrameSearchFlag.hpp>
+#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
+
+#include <base/link_utils.h> // GetLinkDir/BootstrapSession (三参 bootstrap 统一)
+#include <base/log.h>
+#include <base/office_paths.h> // .office-link 路径统一 (基目录/子路径派生)
 
 namespace {
 

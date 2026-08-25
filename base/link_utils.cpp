@@ -1,24 +1,22 @@
 // link_utils.cpp — 跨平台会话工具实现 (见 link_utils.h)
 #include "link_utils.h"
 
+#include <chrono>
+#include <cstring>
+#include <filesystem>
+#include <thread>
+
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
 #include <cppuhelper/bootstrap.hxx> // cppu::bootstrap 三参重载 (Windows BootstrapSession 调用)
 #include <osl/thread.hxx>
 #include <rtl/string.hxx>
-
-#include <chrono>
-#include <cstring>
-#include <thread>
-
-
-#include <filesystem>
 
 #include "log.h" // OfficeLog (声明下沉 common; Linux 实现唯一在 office_runtime.so,
                  // Windows 实现唯一在 common (win_office_log.cpp))

@@ -2,10 +2,11 @@
 // Windows: 每 session 独立 soffice 三参 bootstrap (自引导缝)。
 // 声明在 base/link_utils.h; 实现按平台归位 (平台差异的家, HANDOFF 3.3 三原则)。
 #include <base/link_utils.h>    // KernelHost 类声明 + GetLinkDir/BootstrapSession/to_path
-#include <base/office_paths.h>  // desktop_profile (per-session profile 目录)
-#include <base/log.h>           // OfficeLog
 
 #include <filesystem>
+
+#include <base/log.h>           // OfficeLog
+#include <base/office_paths.h>  // desktop_profile (per-session profile 目录)
 
 namespace link_utils {
 

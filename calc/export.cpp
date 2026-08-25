@@ -12,9 +12,9 @@
 // C++ 异常 (UNO 竞态抛出的 RuntimeException/IllegalArgumentException 等)
 // 不得逃逸 C ABI — 逃逸会 std::terminate → SIGABRT (attack_uaf_probe
 // UAF-1 实证)。
-#include <base/abi.h>
 #include "session.h"
 
+#include <base/abi.h>
 #include <base/session_registry.h>  // V4: ABI 入口守卫 + AbiCall 异常边界
 
 namespace {

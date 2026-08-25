@@ -1,11 +1,11 @@
 #pragma once
-#include <com/sun/star/awt/XWindow.hpp>
+#include <X11/Xlib.h>
 #include <com/sun/star/awt/Rectangle.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/media/XPlayerWindow.hpp>
 #include <com/sun/star/media/ZoomLevel.hpp>
 #include <cppuhelper/implbase1.hxx>
 #include <sal/types.h>
-#include <X11/Xlib.h>
 
 // PlayerWindowShell — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 [ffplay-embed] §4):
 // setPosSize/setVisible/update 等均为 no-op。窗口句柄 + 尺寸来自 createPlayerWindow 的

@@ -6,18 +6,18 @@
 // 迁移自 calc/linux/calc_platform.cpp (原 calc/impress 两份 77% 重复的公共侧)。
 #pragma once
 
-#include <platform/link_platform.h>
-#include <runtime/runtime.h> // OfficeRuntime (Xvfb/内核/slot)
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/XShm.h>
-
 #include <cstdint>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
+
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/extensions/XShm.h>
+
+#include <platform/link_platform.h>
+#include <runtime/runtime.h> // OfficeRuntime (Xvfb/内核/slot)
 
 // 窗口树扫描结果 (匹配规则与 MatchWindow 的输入)
 struct WinInfo {

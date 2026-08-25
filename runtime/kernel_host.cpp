@@ -3,10 +3,11 @@
 // 声明在 base/link_utils.h; 实现按平台归位 (平台差异的家, HANDOFF 3.3 三原则)。
 // writer 无 LinkPlatform 层 (经验 38④), calc/impress 走 LinkPlatform 体系不用本类。
 #include <base/link_utils.h>  // KernelHost 类声明
-#include <base/log.h>         // OfficeLog
-#include "runtime.h"  // OfficeRuntime/BootLock/OfficeRuntimeConfig
 
 #include <cstdlib>  // setenv (LANG, 经验 25 陷阱)
+
+#include <base/log.h>         // OfficeLog
+#include "runtime.h"  // OfficeRuntime/BootLock/OfficeRuntimeConfig
 
 namespace link_utils {
 

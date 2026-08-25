@@ -9,29 +9,28 @@
 #include <filesystem>
 #include <thread>
 
-#include <osl/file.hxx>
-#include <cppuhelper/bootstrap.hxx>
-
-#include "link_utils.h" // u2s/s2u/HideUiBlock (公共会话工具, 经验 32 平台归组)
-#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
-
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/XFastPropertySet.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/lang/XMultiComponentFactory.hpp>
-#include <com/sun/star/util/XCloseable.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/XFastPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XComponentLoader.hpp>
+#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/XLayoutManager.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/presentation/XPresentationSupplier.hpp>
+#include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
+#include <cppuhelper/bootstrap.hxx>
+#include <osl/file.hxx>
+
+#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
+#include "link_utils.h" // u2s/s2u/HideUiBlock (公共会话工具, 经验 32 平台归组)
 
 using css::uno::Reference;
 using css::uno::UNO_QUERY;

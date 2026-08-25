@@ -3,14 +3,6 @@
 // 不改上游代码 (ffplay_embed.c / cmdutils.c / ffplay.c, patch 纪律, 经验 34)。
 #pragma once
 
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/rotating_file_sink.h>
-#include <spdlog/sinks/ostream_sink.h>
-
-extern "C" {
-#include <libavutil/log.h>
-}
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -19,6 +11,14 @@ extern "C" {
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/spdlog.h>
+
+extern "C" {
+#include <libavutil/log.h>
+}
 
 namespace ffplay_log {
 

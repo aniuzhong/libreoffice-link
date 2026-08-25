@@ -20,13 +20,13 @@
 #include <string>
 #include <vector>
 
+#include <com/sun/star/frame/XDesktop.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/lang/XComponent.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
 
-#include <base/link_utils.h> // KernelHost (G 缝, 引导缝封装)
 #include <base/frame_pump.h> // 阶段3: 统一帧泵 (替代 poll_thread_/paused_/force_frame_)
+#include <base/link_utils.h> // KernelHost (G 缝, 引导缝封装)
 
 typedef void (*WriterFrameCallback)(const uint8_t* data, int32_t width, int32_t height,
                                     int32_t row_pitch, int32_t size, int32_t format, void* opaque);

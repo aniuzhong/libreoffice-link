@@ -1,17 +1,17 @@
 // ffplay_player.cxx — XPlayer 真播放器 (ffplay 嵌入引擎, 经验 30/34)。
 // 职责与生命周期见 [ffplay-embed] §4/§1。
 #include "ffplay_player.hxx"
-#include "ffplay_window.hxx"
-#include "ffplay_log.h"  // FFLOG_*
-
-#include "compat/ffplay_engine.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <cmath>
 #include <mutex>
 #include <vector>
+
+#include "compat/ffplay_engine.h"
+#include "ffplay_log.h"  // FFLOG_*
+#include "ffplay_window.hxx"
 
 using namespace css;
 using namespace css::uno;

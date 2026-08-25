@@ -10,12 +10,6 @@
 #include <filesystem>
 #include <fstream>
 
-#include "md5.h"
-#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
-#include <base/link_utils.h>   // u2s/s2u/kFrameFormatBGRA/to_path/KernelHost (跨平台会话工具)
-#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
-
-#include <osl/file.hxx>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -28,6 +22,12 @@
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
+#include <osl/file.hxx>
+
+#include <base/link_utils.h>   // u2s/s2u/kFrameFormatBGRA/to_path/KernelHost (跨平台会话工具)
+#include <base/log.h> // OfficeLog (Linux 实现 office_runtime, Windows 实现 common)
+#include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
+#include "md5.h"
 
 #ifdef _WIN32
 #include <windows.h>

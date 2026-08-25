@@ -9,14 +9,14 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 // 窗口工作绑定点 (相对核心里程碑; 平台声明白己的窗口工作发生处)
 enum class WindowPoint { None, BeforeReveal, AfterReveal, AfterStart };

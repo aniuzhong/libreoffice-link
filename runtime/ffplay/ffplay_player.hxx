@@ -1,9 +1,9 @@
 #pragma once
-#include <com/sun/star/media/XPlayer.hpp>
-#include <cppuhelper/implbase1.hxx>
-
 #include <string>
 #include <vector>
+
+#include <com/sun/star/media/XPlayer.hpp>
+#include <cppuhelper/implbase1.hxx>
 
 // FfplayPlayer — XPlayer 播放器 (ffplay 嵌入引擎, 经验 30/34); 设计见 [ffplay-embed]。
 class FfplayPlayer final : public cppu::WeakImplHelper1<css::media::XPlayer> {
