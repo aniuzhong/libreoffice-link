@@ -242,7 +242,7 @@ typedef struct VideoState {
     AVStream *audio_st;
     PacketQueue audioq;
     int audio_hw_buf_size;
-    SDL_AudioDeviceID audio_dev; /* 多实例根治: 每实例独立音频设备 (下沉自全局, 详见 HANDOFF 六、ffplay 媒体后端/多实例根治) */
+    SDL_AudioDeviceID audio_dev; /* 多实例根治: 每实例独立音频设备 (下沉自全局, 详见 [ffplay-embed] §6.2) */
     uint8_t *audio_buf;
     uint8_t *audio_buf1;
     unsigned int audio_buf_size; /* in bytes */
@@ -375,7 +375,7 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_RendererInfo renderer_info = {0};
 #ifdef FFPLAY_EMBED
-static SDL_mutex *render_mutex; /* 多实例根治: 串行 video_display 全局渲染上下文 (window/renderer 仅活跃实例有效, 受此锁保护, 详见 HANDOFF 六、ffplay 媒体后端/多实例根治) */
+static SDL_mutex *render_mutex; /* 多实例根治: 串行 video_display 全局渲染上下文 (window/renderer 仅活跃实例有效, 受此锁保护, 详见 [ffplay-embed] §6.2) */
 static void *ffplay_embed_parent_window = NULL; /* 引擎 create 时设定 */
 #endif
 
@@ -1440,7 +1440,7 @@ static void video_display(VideoState *is)
     /* 多实例根治: 串行全局渲染上下文 (window/renderer 仅活跃实例有效, 受 render_mutex 保护)。
        video_open 亦在此临界区内 (仅由本函数调用), 所有全局 renderer 读位 (RenderClear/Copy/Present
        + image/audio display helpers) 均在调用树内, 一把锁覆盖整个全局访问面。
-       软件渲染本就单 CPU, 串行无并发损失 (经验 19b/37)。详见 HANDOFF 六、ffplay 媒体后端/多实例根治 */
+       软件渲染本就单 CPU, 串行无并发损失 (经验 19b/37)。详见 [ffplay-embed] §6.2 */
     SDL_LockMutex(render_mutex);
     window = is->window;
     renderer = is->renderer;

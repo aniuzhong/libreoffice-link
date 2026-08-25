@@ -7,7 +7,7 @@
 #include <sal/types.h>
 #include <X11/Xlib.h>
 
-// PlayerWindowShell — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 doc/ffplay-embed.md §4):
+// PlayerWindowShell — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 [ffplay-embed] §4):
 // setPosSize/setVisible/update 等均为 no-op。窗口句柄 + 尺寸来自 createPlayerWindow 的
 // sequence<any> (mediawindow_impl.cxx:436-442, [0]=sal_IntPtr 父窗口句柄, [1]=awt::Rectangle)。
 class PlayerWindowShell final : public cppu::WeakImplHelper1<css::media::XPlayerWindow> {

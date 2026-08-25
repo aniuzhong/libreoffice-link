@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-// FfplayPlayer — XPlayer 播放器 (ffplay 嵌入引擎, 经验 30/34); 设计见 doc/ffplay-embed.md。
+// FfplayPlayer — XPlayer 播放器 (ffplay 嵌入引擎, 经验 30/34); 设计见 [ffplay-embed]。
 class FfplayPlayer final : public cppu::WeakImplHelper1<css::media::XPlayer> {
 public:
     // XPlayer 接口 (实现见 ffplay_player.cxx)
@@ -29,7 +29,7 @@ public:
     ~FfplayPlayer() override; // 引擎清理
     void SetUrl(const std::string& url) { url_ = url; } // createPlayer 时由 Manager 传入
 
-    // 静音: 物理窗口句柄归属 (方案 A), 机制见 doc/ffplay-embed.md §7。
+    // 静音: 物理窗口句柄归属 (方案 A), 机制见 [ffplay-embed] §7。
     static void SetMuteAll(const std::vector<long>& window_ids, bool mute);
 
 private:

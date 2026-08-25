@@ -1,4 +1,4 @@
-// ffplay_log.h — ffplay 组件日志基础设施 (ffplay 日志专项, 见 doc/ffplay-embed.md §8)。
+// ffplay_log.h — ffplay 组件日志基础设施 (ffplay 日志专项, 见 [ffplay-embed] §8)。
 // header-only (inline + FFLOG 宏), C++17 magic statics 保证 per-process 单实例。
 // 不改上游代码 (ffplay_embed.c / cmdutils.c / ffplay.c, patch 纪律, 经验 34)。
 #pragma once

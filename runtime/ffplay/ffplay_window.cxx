@@ -1,4 +1,4 @@
-// ffplay_window.cxx — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 doc/ffplay-embed.md §4)
+// ffplay_window.cxx — XPlayerWindow no-op 壳 (渲染由 ffplay 引擎接管, 见 [ffplay-embed] §4)
 #include "ffplay_window.hxx"
 #include "ffplay_log.h"  // FFLOG_*
 

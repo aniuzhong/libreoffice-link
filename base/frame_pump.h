@@ -1,20 +1,5 @@
-// frame_pump.h — 三链统一帧泵 (经验 42 治理; 会话基础设施, 非平台层)
-//
-// 契约 (HANDOFF.md 经验 42 详述 / 五、帧泵专项):
-//   状态机: Idle ──Start──▶ Running ⇄(Pause/Resume)⇄ Paused
-//           任意状态 ──Stop──▶ Stopped; Stopped ──Start──▶ Running
-//   Start:        幂等; 任何状态调用后 = Running 且未暂停
-//   Stop:         幂等; join 泵线程, 排空在途帧; 之后无自动推帧
-//   Pause:        冻结周期推帧 (heartbeat 是否照推 = plan 字段); 不影响 UpdateFrame
-//   Resume:       恢复周期推帧
-//   UpdateFrame:  同步立即帧, Running/Paused/Stopped 任何状态有效; 与 tick 串行
-//
-// 锁纪律 (五、帧泵专项 5.1 决策二):
-//   调用泵方法时不得持有会话锁 mu_
-//   FrameFn/ChangeFn 内部自取所需的短会话锁
-//   全局锁序: frame_mutex_ → mu_(短), 严禁反向
-//
-// 生命周期不变量: 泵必须先 Stop, 会话才能清 UNO 对象/平台资源
+// frame_pump.h — 三链统一帧泵 (经验 42 治理; 会话基础设施, 非平台层)。
+// 契约/锁纪律/生命周期不变量见 [framepump] §0; 设计决策见 [framepump] §1-§5。
 #pragma once
 
 #include <atomic>

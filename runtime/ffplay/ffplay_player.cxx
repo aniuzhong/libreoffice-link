@@ -1,5 +1,5 @@
 // ffplay_player.cxx — XPlayer 真播放器 (ffplay 嵌入引擎, 经验 30/34)。
-// 职责与生命周期见 doc/ffplay-embed.md §4/§1。
+// 职责与生命周期见 [ffplay-embed] §4/§1。
 #include "ffplay_player.hxx"
 #include "ffplay_window.hxx"
 #include "ffplay_log.h"  // FFLOG_*
@@ -16,7 +16,7 @@
 using namespace css;
 using namespace css::uno;
 
-// 静音归属 (方案 A): 物理窗口句柄做归属键, 机制见 doc/ffplay-embed.md §7。
+// 静音归属 (方案 A): 物理窗口句柄做归属键, 机制见 [ffplay-embed] §7。
 namespace {
 struct EngineEntry { void* engine; long window_id; };  // window_id = X11 媒体子窗口 ID
 std::mutex g_engines_mutex;
@@ -39,7 +39,7 @@ void FfplayPlayer::UnregisterEngine(void* engine) {
 
 void FfplayPlayer::SetMuteAll(const std::vector<long>& window_ids, bool mute) {
     std::lock_guard<std::mutex> lk(g_engines_mutex);
-    // 空列表 = no-op (不动任何引擎; 共享内核免误伤他 session, 见 doc/ffplay-embed.md §7.2)
+    // 空列表 = no-op (不动任何引擎; 共享内核免误伤他 session, 见 [ffplay-embed] §7.2)
     if (window_ids.empty()) {
         FFLOG_INFO("[FFPLAY] SetMuteAll(wids=0, %s) engines=%zu matched=0 (no-op, empty wids)",
                    mute ? "true" : "false", g_engines.size());

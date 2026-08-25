@@ -534,7 +534,7 @@ bool OfficeRuntime::EnsureKernel(const std::string& user_installation) {
     // 底部留未绘制带 (透显缺陷的"接收漏洞") 且幻灯片被纵向压扁 ~3.4%。=1 时
     // 放映视图铺满父窗口: 带消失、比例精确。机制同上: env 快照继承 (经验 24),
     // 不覆盖宿主 (宿主 export ORT_SLIDE_FILL_WINDOW=0 可回退)。
-    // 见 doc/defect-impress-bleed-through.md。
+    // 见 [bleed-through]。
     setenv("ORT_SLIDE_FILL_WINDOW", "1", 0);
     // 媒体 sink 修复实际走 LO 源码改动 + 组件替换部署 (HANDOFF 经验 18):
     // gstplayer.cxx 回退分支优先 ximagesink, 增量编译后替换 libavmediagst.so

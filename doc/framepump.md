@@ -4,6 +4,21 @@
 > 本文件收录设计决策论证、性能预算、测试矩阵等深度内容 (源自原始设计稿, 已落地)。
 > FramePump 是会话基础设施 (common, 与 link_utils 平级), 与平台隔离设计正交。
 
+## 0. 契约（三链同一份, FramePump 构造性保证）
+
+状态机: `Idle ─Start─ Running ⇄(Pause/Resume)⇄ Paused`; 任意状态 `─Stop─ Stopped`; `Stopped ─Start─ Running`。
+
+| 方法 | 契约 |
+|---|---|
+| Start | 幂等; 任何状态调用后 = Running 且**未暂停** (无条件 `paused_=false` 再判幂等, 构造性消灭 P1/P5; 经验 41 同构回归: 幂等早返未重置 paused_ 致暂停后无法翻页) |
+| Stop | 幂等; join 泵线程, 排空在途帧; 之后无自动推帧。**V6**: 若调用线程即泵线程 (如帧回调内 Destroy→Stop), 跳过 join 自己 (UB/死锁), 只置 stop_requested 由泵线程自退出 |
+| Pause | 冻结周期推帧 (心跳是否照推 = `plan.heartbeat_when_paused`); 绝不影响 UpdateFrame |
+| Resume | 恢复周期推帧 |
+| UpdateFrame | 同步立即帧, Running/Paused/Stopped 任意状态有效; 与 tick 串行 (frame_mutex_); **不去重** (调用方要的就是一帧), 成功仅更新 dedupe 基线 |
+
+生命周期不变量: **泵必须先 Stop, 会话才能清 UNO 对象/平台资源** (probe/FrameFn 引用的 pane_/view_/platform_ 仅泵停止后可销毁)。
+锁纪律: 调用泵方法不得持会话锁 mu_; FrameFn/ChangeFn 内部自取短锁; 全局锁序 `frame_mutex_ → mu_(短)`, 严禁反向。
+
 ## 1. 设计决策
 
 ### 决策一: frame_mutex_ 串行化, 否决"单线程委托"

@@ -13,7 +13,7 @@
 
 **FramePoller 共性分析与治理 (2026-08-18 分析, 2026-08-19 阶段0-4 全部落地)**
 
-三链 (impress/calc/writer) 各自手写一份 poller (`poll_thread_`/`poll_running_`/`paused_`/`force_frame_`/`mu_` 同名同型), 六维不一致演化出 P1-P8 缺陷。本经验为完整治理记录; 设计决策论证/性能预算/测试矩阵见 [design-framepump.md](design-framepump.md)。
+三链 (impress/calc/writer) 各自手写一份 poller (`poll_thread_`/`poll_running_`/`paused_`/`force_frame_`/`mu_` 同名同型), 六维不一致演化出 P1-P8 缺陷。本经验为完整治理记录; 设计决策论证/性能预算/测试矩阵见 [framepump.md](framepump.md)。
 
 **契约 (三链同一份, FramePump 构造性保证):**
 

@@ -1,5 +1,5 @@
 // ffplay_manager.cxx — Manager_FFPlay 组件 (注入 + 静音 + 日志, service:
-// com.sun.star.comp.avmedia.Manager_FFPlay)。注入机制见 doc/ffplay-embed.md §1,
+// com.sun.star.comp.avmedia.Manager_FFPlay)。注入机制见 [ffplay-embed] §1,
 // 静音方案 A 见 §7, 日志见 §8。
 #include <com/sun/star/media/XManager.hpp>
 #include <com/sun/star/beans/XFastPropertySet.hpp>
@@ -16,7 +16,7 @@ using namespace css;
 using namespace css::uno;
 using rtl::OUString;
 
-// XFastPropertySet handle 0 = MGR_PROP_MUTE_WINDOWS (per-window 静音, 见 doc/ffplay-embed.md §7)。
+// XFastPropertySet handle 0 = MGR_PROP_MUTE_WINDOWS (per-window 静音, 见 [ffplay-embed] §7)。
 //   Any = Sequence<Any> = {Sequence<sal_Int32>(window_ids), mute(bool)}
 constexpr sal_Int32 MGR_PROP_MUTE_WINDOWS = 0;
 

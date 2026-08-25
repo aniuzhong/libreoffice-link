@@ -5,7 +5,7 @@
 > 经验编号被代码注释引用,**编号只增不改**;每次认知提升更新"二、经验"(带时间+置信度),完成事项移入"一、现状"。
 >
 > **分层阅读 (2026-08-20 重构)**: 本文件 = Core(每次必读: 现状/沙箱运行策略/经验索引/漏洞/待办);
-> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[design-platform-isolation.md](design-platform-isolation.md)(平台隔离)/[design-framepump.md](design-framepump.md)(帧泵)/[ffplay-embed.md](ffplay-embed.md)(FFplay 嵌入专项)。
+> 深度内容在同目录伴随文件 (本文件即 doc/HANDOFF.md),按需读取: [experiences.md](experiences.md)(经验详述)/[design-platform-isolation.md](design-platform-isolation.md)(平台隔离)/[framepump.md](framepump.md)(帧泵)/[ffplay-embed.md](ffplay-embed.md)(FFplay 嵌入专项)。
 
 ---
 
@@ -18,7 +18,7 @@
 | 项目架构/关键路径/当前状态 | 一、项目现状 |
 | 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42 详述+失效条件+零引用清单) |
 | 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [design-platform-isolation.md](design-platform-isolation.md) |
-| FramePump 设计决策/性能预算/测试矩阵 | [design-framepump.md](design-framepump.md) |
+| FramePump 设计决策/性能预算/测试矩阵 | [framepump.md](framepump.md) |
 | **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [defect-impress-bleed-through.md](defect-impress-bleed-through.md) |
 | ffplay 尺寸链/多实例根治/静音/日志 | [ffplay-embed.md](ffplay-embed.md) |
 | **当前未修复漏洞 (V3 待修; V1/V2/V4/V5/V6 已修)** | **八、已知漏洞** |
@@ -344,7 +344,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ## 五、帧泵专项 [设计] (updated 2026-08-19)
 
-> 对应经验 42 ([详述](experiences.md))。**设计决策论证 (frame_mutex_ 串行化否决单线程委托/锁纪律/静止检测两阶段/tick 循环)、性能预算、测试矩阵、开放问题 A/B** 见 [design-framepump.md](design-framepump.md)。
+> 对应经验 42 ([详述](experiences.md))。**设计决策论证 (frame_mutex_ 串行化否决单线程委托/锁纪律/静止检测两阶段/tick 循环)、性能预算、测试矩阵、开放问题 A/B** 见 [framepump.md](framepump.md)。
 > 摘要: FramePump 统一帧泵 (common, 与平台隔离正交), 三链 (impress tick=40/writer 5/calc 20) 全部接入收官; P1-P8 缺陷由契约构造性消灭; 单测 15/15; 阶段5 (dedupe/增量比对) 可选未做。
 
 ---

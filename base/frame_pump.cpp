@@ -15,9 +15,7 @@ FramePump::~FramePump() {
 
 void FramePump::Start() {
     std::lock_guard<std::mutex> lk(ctrl_mutex_);
-    // 契约 (HANDOFF.md 经验 42 详述契约表): "Start=任何状态→Running 未暂停"。
-    // 幂等路径也须重置 paused_ —— 暂停后用 Start 恢复(经验 41 路径)依赖此行为,
-    // 否则 paused_ 残留 → tick 跳过推帧 → 画面冻结(2026-08-19 impress 回归复现)。
+    // Start: 幂等且无条件重置 paused_ (经验 41/42; 契约见 [framepump] §0)
     paused_ = false;
     if (running_.load())
         return;  // 幂等
@@ -34,8 +32,7 @@ void FramePump::Stop() {
         stop_requested_ = true;
     }
     wake_cv_.notify_all();
-    // V6 修复: 若当前线程就是泵线程 (如帧回调里调 Destroy→Stop), join 自己
-    // 是未定义行为 (通常死锁)。跳过 join, 设 stop_requested 后泵线程自己退出循环。
+    // V6 修复: 泵线程内调 Stop (帧回调→Destroy) 时禁止 join 自己 (见 [HANDOFF] 八 V6)
     if (poll_thread_.joinable() &&
         std::this_thread::get_id() != poll_thread_.get_id()) {
         poll_thread_.join();
@@ -57,13 +54,9 @@ bool FramePump::UpdateFrame() {
     if (!frame_fn_)
         return false;
     bool ok = frame_fn_();
-    // 显式请求不走去重 (调用方要的就是一帧)
+    // 显式请求不去重; 仅更新 dedupe 基线 (完整实现需 FrameFn 返回像素指针, 阶段二增量)
     if (ok) {
-        // 更新 dedupe 基线 (避免下一 tick 因 memcmp 相同而跳过)
-        // 注: FrameFn 内部已投递 cb_, 这里只更新基线
         has_last_frame_ = true;
-        // last_frame_ 不在此更新 (FrameFn 内部不知道像素地址)
-        // dedupe 的完整实现需 FrameFn 返回像素指针, 阶段二增量
     }
     return ok;
 }

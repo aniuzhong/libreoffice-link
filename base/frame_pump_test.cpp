@@ -1,8 +1,5 @@
-// frame_pump_test.cpp — FramePump 单元测试 (无框架, 断言式)
-// 验证契约 (HANDOFF.md 经验 42 详述 / 五、帧泵专项):
-//   Start 幂等/重置、Stop 排空、Pause 冻结与 UpdateFrame 可用、
-//   UpdateFrame 与 tick 串行 (序列断言)、心跳间隔、失败退避。
-// 树内编译不部署 (沿 office_runtime_test 模式)。
+// frame_pump_test.cpp — FramePump 单元测试 (无框架, 断言式)。
+// 验证 [framepump] §0 契约 + §3 测试矩阵。树内编译不部署。
 #include "frame_pump.h"
 
 #include <atomic>

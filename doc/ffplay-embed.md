@@ -13,7 +13,7 @@ ffplay = **无 GPU 环境下的软解媒体后端**，替代 gst 崩溃链。
 
 - **价值**：无 gst 时提供播放能力 + 音频；**不是防卡死**（卡死由 18 已修的同款 sink 问题引起）。媒体必需最小集（gst 回退用）：libgstreamer1.0-0 + plugins base/good/bad/ugly + x；gl 移除更安全（经验 28）。
 - **后端开关**：默认 ffplay（`ORT_MEDIA_BACKEND`），gstreamer 为验证过的回退路径。EnsureKernel setenv 不覆盖宿主（经验 30）。
-- **GL 全禁用**：`SAL_DISABLEGL=1`（转场，经验 21）+ ffplay 的 `SDL_FRAMEBUFFER_ACCELERATION=0` + SOFTWARE renderer（经验 37）——Xvfb 恒无 GPU，一切渲染固定软件路径（经验 19b）。ffplay 媒体画面在 LO 渲染管线之外（design-framepump J 类边界）。
+- **GL 全禁用**：`SAL_DISABLEGL=1`（转场，经验 21）+ ffplay 的 `SDL_FRAMEBUFFER_ACCELERATION=0` + SOFTWARE renderer（经验 37）——Xvfb 恒无 GPU，一切渲染固定软件路径（经验 19b）。ffplay 媒体画面在 LO 渲染管线之外（见 [framepump] J 类边界）。
 - **LO 源码改动**：两处已固化远端 commit `83e0b9c3e`（gstplayer.cxx + mediawindow_impl.cxx）。
 
 ## 1. 注入机制（B 类）
