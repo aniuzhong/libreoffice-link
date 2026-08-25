@@ -110,4 +110,5 @@ private:
     std::vector<uint8_t> cap_bgra_;
     std::set<Window> preexisting_; // 加载文档前已存在的窗口
     ShmState shm_;                 // XShm 抓帧状态 (窗口尺寸变化自动重建)
+    bool edges_blackout_pending_ = false; // 落位/改尺寸后待黑化边圈 (首帧执行, 见 CaptureFrame)
 };

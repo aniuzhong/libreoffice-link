@@ -452,6 +452,10 @@ bool XvfbSessionPlatform::SizeWindowToSlot(int width, int height) {
         runtime_.CheckWindowOverlap();
         runtime_.DumpWindowEdges();
     }
+    // 边圈黑化推迟到首帧 (edges_blackout_pending_): 本函数跑在 P8 (UI 隐藏 P9 之前),
+    // P9 的 setMenuBar/hideElement 重排版会让 VCL 把顶行重新刷白 —— 实测 X 层清了
+    // 2s 内即被复原; 首帧抓取发生在 P10 (P9 之后), 时序天然正确。
+    edges_blackout_pending_ = true;
     return true;
 }
 
@@ -464,6 +468,7 @@ bool XvfbSessionPlatform::SetWindowSize(int width, int height) {
         return false;
     XResizeWindow(d, win_, width, height);
     XSync(d, False);
+    edges_blackout_pending_ = true; // 改尺寸后边圈重露, 下次首帧再黑化
     // XSync 返回时窗口尺寸已生效 (Xvfb 同步模式)。LO 内核的重排版是异步的,
     // 由帧泵下一轮 CaptureFrame 自然消化 — 排版未完时抓到半成品帧, tick 后
     // 再抓即排完。此处不再 sleep 等待 (原 200ms 无实证依据, V2 卡死根因;
@@ -475,6 +480,27 @@ bool XvfbSessionPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height
     Display* d = static_cast<Display*>(dpy_);
     if (!d || !win_)
         return false;
+    // 边圈黑化 (首帧/改尺寸后一次; 2026-08-24 透显缺陷收尾):
+    // VCL 框架内缩圈 (左2/顶1px) 是放映内容外的最后未绘制区 —— 顶行由 VCL 在
+    // 每次曝光时主动刷白 (黑模板上呈 1px 白线), 左圈在窗口出生于其他文档之上时
+    // 吸附外来像素 (透显残影)。LO 侧无解 (SetBackground 换不动曝光重绘, 负坐标
+    // 平移被父矩形裁剪); X 层"无曝光清法"可持有: 重设背景像素 + 清边圈不产生
+    // Expose, VCL 不知情故不重绘, 实测长期持有。放首帧执行 = P9 UI 隐藏之后,
+    // 避开 P9 重排版的重新刷白窗口期。
+    if (edges_blackout_pending_) {
+        XWindowAttributes a;
+        if (XGetWindowAttributes(d, win_, &a) && a.width > 2 && a.height > 2) {
+            XSetWindowBackground(d, win_, BlackPixel(d, DefaultScreen(d)));
+            XClearArea(d, win_, 0, 0, a.width, 1, False);           // 顶
+            XClearArea(d, win_, 0, 0, 1, a.height, False);          // 左
+            XClearArea(d, win_, a.width - 1, 0, 1, a.height, False); // 右
+            XClearArea(d, win_, 0, a.height - 1, a.width, 1, False); // 底
+            XSync(d, False);
+            OfficeLogDbg("[%s] edges blackout applied to 0x%lx (%dx%d)",
+                         Tag(), (unsigned long)win_, a.width, a.height);
+        }
+        edges_blackout_pending_ = false;
+    }
     // 窗口位于独立 slot 区域 (互不重叠), 抓帧始终返回真实内容。
     // XShm + 字节序直拷优先, 失败回退 XGetImage (见 GrabBgra)。
     int w = 0, h = 0;

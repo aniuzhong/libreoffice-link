@@ -228,6 +228,7 @@ add_multi_tools(bleed_probe linux/bleed_probe.cpp)
 target_link_libraries(bleed_probe PRIVATE dl) # dlsym 动态加载 libXcomposite (无 dev 包)
 add_multi_tools(composite_redirect_probe linux/composite_redirect_probe.cpp)
 target_link_libraries(composite_redirect_probe PRIVATE dl X11::Xext) # dlsym + XShm
+add_multi_tools(topcorner_probe linux/topcorner_probe.cpp)
 add_office_tools(minimal_load_probe linux/minimal_load_probe.cpp)
 add_impress_tools(iframe_probe linux/iframe_probe.cpp)
 add_impress_tools(mute_isolation_probe linux/mute_isolation_probe.cpp)
