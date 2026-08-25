@@ -1,9 +1,5 @@
-// office_runtime.cpp — 进程级共享 LibreOffice 运行时 (Linux 共享内核模式)
-// 实现从 calc_session.cpp / linux/calc_platform.cpp 迁移 (历史说明: 平台
-// 公共侧 2026-08-14 已归组至 common/linux/xvfb_platform.cpp, 经验 32):
-//   LO 共享内核 (bootstrap/复用/引用计数)      <- calc_session.cpp
-//   Xvfb 生命周期 (启动/显示号/回收)           <- linux/calc_platform.cpp
-//   Slot 分区 (alloc/free/位图)              <- linux/calc_platform.cpp
+// office_runtime.cpp — 进程级共享 LibreOffice 运行时 (Linux 共享内核模式):
+// LO 内核 + Xvfb + Slot 分区 (由 calc_session/xvfb_platform 归组, 经验 32)。
 #include "runtime.h"
 #include <base/office_paths.h> // .office-link 路径统一 (header-only, 零依赖)
 #include "../third_party/scope_guard.hpp" // DEFER: C 资源清理 (XCloseDisplay/munmap/close)
@@ -54,12 +50,7 @@ namespace {
 constexpr int kDisplayMin = 90;
 constexpr int kDisplayMax = 100; // exclusive upper bound
 
-// ---- 统一日志 (spdlog 惰性初始化) ----
-// 首次 OfficeLog 调用时初始化 (calclink/impresslink 的 Create begin 早于
-// EnsureKernel)。
-// 单点初始化: 所有依赖 office_runtime.so 的进程/库共享同一 logger。
-// 环境变量 ORT_LOG: both(默认, 文件+stderr) | file | stderr | off;
-// ORT_LOG_LEVEL: debug|info(默认)|warn|error (spdlog level)。
+// ---- 统一日志 (spdlog 惰性单点初始化; ORT_LOG/ORT_LOG_LEVEL 控制见 [HANDOFF] 1.7) ----
 void InitOfficeLog() {
     const char* mode = getenv("ORT_LOG");
     if (mode && strcmp(mode, "off") == 0)
@@ -104,9 +95,7 @@ void InitOfficeLog() {
 
 }  // namespace
 
-// 统一日志入口 (log.h): 时间戳由 spdlog pattern 提供, 前缀由调用方传入
-// ("[OfficeRuntime]"/"[CalcLink]"...), 跨进程时序靠时间戳对照。
-// 级别变体见 log.h (info 默认 / Dbg 诊断 / Warn 防御 / Err 失败)。
+// 统一日志入口 (log.h): 前缀由调用方传, 跨进程时序靠时间戳对照。
 namespace {
 // ORT_LOG=off 时真正静默: 不初始化 logger 且直接丢弃 (spdlog 默认 logger
 // 会打 stdout, 仅跳过初始化并不能关掉 — 2026-08-17 收尾修正)
@@ -161,7 +150,7 @@ std::string GetRuntimeDir() {
     return ".";
 }
 
-// 等待 Xvfb 显示可达
+// 等待 Xvfb 显示可达 (轮询 XOpenDisplay)
 bool WaitForX(const std::string& dpy) {
     for (int i = 0; i < 50; i++) {
         Display* d = XOpenDisplay(dpy.c_str());
@@ -518,23 +507,9 @@ bool OfficeRuntime::EnsureKernel(const std::string& user_installation) {
     // 跨进程复用内核时由内核进程的 EnsureKernel 兜底。部署侧 (run.sh)
     // 也建议设置, 覆盖不经过本模块的启动路径。
     setenv("SAL_DISABLEGL", "1", 0); // 不覆盖宿主已有的显式设置
-    // 媒体后端选择开关 (方案 A, HANDOFF 经验 30/34): LO 的 mediawindow_impl.cxx
-    // (libavmedialo.so, 已本地改码+增量编译) 读此变量选择后端:
-    //   ORT_MEDIA_BACKEND=ffplay -> com.sun.star.comp.avmedia.Manager_FFPlay
-    //     (自治媒体后端: ffplay 嵌入引擎, 真实视频+音频, 经验 34)
-    //   其他/空                  -> 编译期默认 (GStreamer, 上游行为)
-    // 默认 ffplay (2026-08-14 切换: gstreamer 已不能满足需求 — Xvfb 下
-    // 无音频设备时 gst 静默无声; ffplay 引擎全链路验证通过)。
-    // 机制同 SAL_DISABLEGL: bootstrap 子进程继承 env 快照 (经验 24);
-    // 不覆盖宿主显式设置 (宿主 export ORT_MEDIA_BACKEND=gstreamer 可回退)。
+    // 媒体后端开关 (ffplay 默认; 机制见 [ffplay-embed] §1/§0, 宿主 export 可回退)
     setenv("ORT_MEDIA_BACKEND", "ffplay", 0);
-    // 放映视图铺满窗口开关 (2026-08-24, bleed 缺陷根治): LO sd 补丁
-    // (slideshowimpl.cxx, 同 gstplayer/mediawindow 的本地改码模式) 读此变量 —
-    // 窗口化放映默认取 getClientRectangle() (永远保留状态栏布局槽 ~37px@100dpi),
-    // 底部留未绘制带 (透显缺陷的"接收漏洞") 且幻灯片被纵向压扁 ~3.4%。=1 时
-    // 放映视图铺满父窗口: 带消失、比例精确。机制同上: env 快照继承 (经验 24),
-    // 不覆盖宿主 (宿主 export ORT_SLIDE_FILL_WINDOW=0 可回退)。
-    // 见 [bleed-through]。
+    // 放映铺满开关 (bleed 根治: 消除透显 + 压扁, 见 [impress-bleed] §4.1; 宿主 export 可回退)
     setenv("ORT_SLIDE_FILL_WINDOW", "1", 0);
     // 媒体 sink 修复实际走 LO 源码改动 + 组件替换部署 (HANDOFF 经验 18):
     // gstplayer.cxx 回退分支优先 ximagesink, 增量编译后替换 libavmediagst.so

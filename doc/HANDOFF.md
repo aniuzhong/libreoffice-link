@@ -19,7 +19,7 @@
 | 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42 详述+失效条件+零引用清单) |
 | 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [platform-isolation.md](platform-isolation.md) |
 | FramePump 设计决策/性能预算/测试矩阵 | [framepump.md](framepump.md) |
-| **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [defect-impress-bleed-through.md](defect-impress-bleed-through.md) |
+| **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [impress-bleed.md](impress-bleed.md) |
 | ffplay 尺寸链/多实例根治/静音/日志 | [ffplay-embed.md](ffplay-embed.md) |
 | **当前未修复漏洞 (V3 待修; V1/V2/V4/V5/V6 已修)** | **八、已知漏洞** |
 | 隔离回归规则(改哪里要回归什么) | 四、4.2 隔离回归规则速查 |
@@ -236,7 +236,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | 13 | **XShm + BGRX 字节序直拷**:Xvfb TrueColor24 视觉=32bpp LSBFirst BGRX → XShmGetImage(0.01ms)+memcpy+alpha(1080p ~1ms vs XGetImage 转换 ~9ms)。非 BGRX 自动回退。links 必须链 X11::Xext | 08-12 前 | 高 |
 | 14 | **屏高 ≥ 最大文档分辨率**(2160p 窗口在 1080 屏 BadMatch);StartXvfb 按 max_doc_height 定高 | 08-12 | 高 |
 | 15 | **屏尺寸 16 位坐标上限 32767 内无阻碍;30720x2160 RSS ~300MB 可起** | 08-12 | 高 |
-| 47 | **透显缺陷根治 (impress 底带透显 xlsx, 2026-08-24 二轮取证)**: 真机制 = ① 窗口化放映视图只画到 window-38px (SFX getClientRectangle 永远保留状态栏槽, 100dpi→38px; 且父容器也被 SFX 缩到 window-38) → 底带从未绘制 + 幻灯片纵向压扁 ~3.4%; ② bg=None 未绘制带是"透明玻璃", 文档窗口按模板钉在 (10,1) 诞生互相重叠, 带吸附下方文档像素; ③ XMoveWindow 屏幕级 blit 把吸附像素搬进 slot → 抓帧读到别的文档内容。根治 = LO 补丁 (slideshowimpl.cxx, env ORT_SLIDE_FILL_WINDOW=1 门控, EnsureKernel 默认置 1): 窗口化放映取**顶层 VCL 窗口**尺寸铺满 (getClientRectangle/父窗口/rSize 全被 SFX 缩过, 不可用) → 未绘制带不存在+比例精确; Fix A (显式背景+清+重映射) 保留作保险带; 卫生层 = 模板给 Calc Factory 钉 `0,0,3840,2160` (= 单 slot 大小, 消 30720 全屏瞬态, 落位仍按需缩小; 单独不治透显)。定论: 被覆盖的活窗口 Expose 自愈, 持久残影只在无人认领区 (未绘制带/中间窗/已销毁窗旧位) → "出生小窗撑大"/"落位前刷黑 slot"均无净收益。证伪: calc 全屏残留非必要源 / root 卫生无效 (暴露被中间 bg=None LO 窗口截胡) / resize 撬不动 SFX 布局 / redirect 不必要; "残留行 y=1042" 是视图底边亮线与 calc 白行的巧合匹配 (测量伪影)。全链验证矩阵+回归见 [defect-impress-bleed-through.md](defect-impress-bleed-through.md)。坑: 探针 dlopen 的 X 扩展库 dlclose 必须晚于 XCloseDisplay (Xext close hook 悬垂 SIGSEGV) | 08-24 | 高(实证+全回归) |
+| 47 | **透显缺陷根治 (impress 底带透显 xlsx, 2026-08-24 二轮取证)**: 真机制 = 放映视图窗口化只画到 window-38px (SFX 状态栏槽, 100dpi→38px, 且父容器被 SFX 同步缩) → 底带未绘制 + 幻灯片压扁 ~3.4%; bg=None 带"吸附"重叠文档像素; XMoveWindow blit 搬运进 slot。根治 = LO 补丁 (slideshowimpl.cxx, env ORT_SLIDE_FILL_WINDOW=1 门控) 取顶层 VCL 铺满 (带消失 + 比例精确); Fix A 显式背景留保险; 卫生层模板钉 calc。定论 (活窗口 Expose 自愈, 残影只在无人认领区) / 证伪 (/root 卫生/resize/redirect) / 全链验证矩阵见 [impress-bleed.md](impress-bleed.md) §4-§10。坑: 探针 dlopen 的 X 扩展 dlclose 必须晚于 XCloseDisplay (Xext close hook 悬垂 SIGSEGV) | 08-24 | 高(实证+全回归) |
 
 ### 2.4 媒体播放
 
@@ -349,31 +349,12 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ---
 
-## 六、共享屏治理专项 [机制·必要性实证] (updated 2026-08-24)
+## 六、共享屏治理专项 [机制·必要性实证] (updated 2026-08-26)
 
-> Impress 底带透显缺陷根治后 (经验 47) 对共享大屏 (Xvfb 30720×2160, 8 slot) 治理栈的
-> 完整盘点。**每层的必要性均经 A/B 实测** (bleed_probe 开关矩阵, 见
-> [defect-impress-bleed-through.md](defect-impress-bleed-through.md) §5), 定性分三档:
-> 机制(缺了不工作)/ 根治(缺了缺陷回来)/ 卫生(对抓帧输出冗余, 按运行收益保留)。
-> 防御原则: **只保留一层保险** (落位黑底), 其余各层各有非防御的存在理由, 不过度防御。
-
-按会话生命周期顺序:
-
-| # | 层 | 机制 | 必要性定性 (实证) |
-|---|---|---|---|
-| 1 | 大屏+slot 分区 | 每 session 跨进程位图分一个 3840×2160 slot, 窗口互不重叠 | **机制** (经验 1/10: 遮挡区抓帧返回背景, 历史踩坑, 无替代) |
-| 2 | 出生几何钉住 (模板) | calc `0,0,3840,2160` / impress `1920,1080`, 不再以 30720 全屏创建渲染 | **卫生** (撤钉实测输出仍 0 行泄漏 —— 对抓帧冗余; 保留理由: 引导渲染足迹 8×↓ + 屏面残渣收敛在自家 slot, 一行配置零运行时成本) |
-| 3 | 窗口化放映铺满 (LO 补丁) | 放映视图取**顶层 VCL 窗口**尺寸而非 SFX 客户区 (后者永远扣状态栏槽 ~38px); `ORT_SLIDE_FILL_WINDOW=1`, EnsureKernel 默认置 1 | **根治+质量, 不可替代** (仅黑底时带变黑但**压扁 3.4% 仍在**; 铺满后带=0 且精确 16:9; 撤补丁缺陷必现 13 行) |
-| 4 | 落位黑底 + 首帧边圈黑化 | SizeWindowToSlot 后整窗落黑再触发 LO 重绘 (`ORT_BLEED_FIX=0` 可关); CaptureFrame 首帧对四边无曝光清黑 (VCL 内缩圈 = 铺满后仅存未绘制区: 顶行 VCL 曝光必刷白、左 2px 吸附残影; LO 侧无解, 无曝光清法 VCL 不知情故持有; 时序必须在 P9 后) | **保险+边圈根治** (边圈黑化独立承载: 保险关全帧 0.000% 匹配; 落位黑底对补丁回退场景兜底) |
-| 5 | 抓帧只读自己窗口 | XShmGetImage 读 session 窗口, 不读裸屏 | **机制** (抓帧模型本身; 配合 1 无遮挡) |
-| 6 | 生命周期清场 | 孤儿 soffice 回收 / Xvfb adopt-or-起 / 僵尸检测 / 杀透+清 lock/socket / slot owner-PID 回收 | **机制** (经验 6/12/35 历史踩坑; 跨会话复用屏的稳定性前提) |
-
-- 残影模型定论 (经验 47): 被覆盖的**活窗口 Expose 自愈**, 持久残影只在无人认领区
-  (未绘制带 / bg=None 中间窗 / 已销毁窗旧位) —— 第 3 层消灭最常见无人认领区,
-  第 4 层兜底其余; "出生小窗撑大"/"落位前刷黑 slot"/root 卫生/XComposite redirect
-  均已证伪或无净收益 (缺陷文档 §6, 勿重走)。
-- 验证入口: `bleed_probe` (输出透显指标+几何指标); 全开关关=必现 13 行, 全开=0 行,
-  是本专项的回归基线。
+> 完整 6 层治理栈总账 (大屏+slot / 出生钉住 / 放映铺满 / 落位黑底+边圈黑化 / 抓帧读己窗 /
+> 生命周期清场; 每层必要性 A/B 实证定性三档、残影模型定论、验证入口) 见
+> [impress-bleed.md](impress-bleed.md) §10。
+> 一句话: 根治交 LO 补丁 (铺满, 不可替代) + 一层保险 (落位黑底), 其余各层各有非防御存在理由。
 
 ---
 

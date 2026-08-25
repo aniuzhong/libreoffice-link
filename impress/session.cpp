@@ -1,11 +1,6 @@
 // impress_session.cpp — Impress 会话实现。
-// 平台隔离设计 ([platform-isolation] Part 2): 意图/机制分离, 会话层零 #ifdef。
-// 流程来自 xvfb_calc_demo/impress_probe.cpp 的验证结论 (Linux):
-//   共享内核 (office_runtime) -> Hidden 加载 pptx -> 控制器窗口可见 ->
-//   窗口化幻灯片 (IsFullScreen=false, LO 自铺满屏) -> 平台层缩窗进 slot ->
-//   轮询抓帧。已实测: 29 页 pptx 翻页/效果/往返一致, slot resize 内容重排。
-// Windows (经验 39): 每 session 独立 soffice + 隐藏桌面, IsFullScreen=true
-//   全屏放映 (LO 自管窗口, 无菜单栏/标题栏), 放映窗口定位 SALTMPSUBFRAME。
+// 共享内核 Hidden 加载 + 窗口化放映 + 平台层缩窗进 slot 后轮询抓帧;
+// 流程与平台差异 (Windows 独立 soffice 全屏, 经验 39) 见 [platform-isolation] Part2 C。
 #include "session.h"
 
 #include <chrono>
@@ -514,23 +509,8 @@ int ImpressSession::GetHeight() {
     return height_;
 }
 
-// 静音专项 (方案 A 重构, 2026-08-21): 经 UNO remote ctx
-// createInstance("Manager_FFPlay") + QI XFastPropertySet + setFastPropertyValue
-// 触发子进程内 FfplayManager::setFastPropertyValue → FfplayPlayer::SetMuteAll
-// (按 window_id 物理句柄精确过滤, 替代易错的 session_id 时序归属)。
-//
-// 路径: ctx_ 是 BootstrapOffice 返回的 remote XComponentContext,
-// 经 URP pipe 跨进程调用到 soffice.bin 子进程内的 FfplayManager 实例。
-// 解决了方案 A (主进程 dlopen ffplay.so 拿空 g_engines 副本) 的失效问题:
-//   Manager 与 g_engines 同处子进程, 调用天然在子进程内执行。
-//
-// XFastPropertySet handle 0 = MGR_PROP_MUTE_WINDOWS (ffplay_manager.cxx 内常量),
-// Any = Sequence<Any>{Sequence<sal_Int32>(window_ids), mute(bool)}。
-// window_ids = platform_->GetMediaWindowIds(): 本 session 放映主窗口下的所有子窗口 ID
-// (LO 为媒体 shape 创建的 X11 子窗口, parent 链回溯到本 session 放映窗口, 跨进程可见)。
-//
-// 后端无关性: gst 后端不会注册 Manager_FFPlay service, createInstance 抛
-// NoSuchServiceException 时 catch 返回 false 由上层兜底 (PptManager 基类)。
+// 静音专项 (方案 A): UNO remote ctx -> Manager_FFPlay -> SetMuteAll (按 window_id
+// 物理句柄过滤, 替代 session_id 时序归属); 完整机制/路径/后端无关性见 [ffplay-embed] §7。
 bool ImpressSession::SetMute(bool mute) {
     if (destroyed_)
         return false;

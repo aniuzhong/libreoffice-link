@@ -433,7 +433,7 @@ bool XvfbSessionPlatform::SizeWindowToSlot(int width, int height) {
     XSync(d, False);
 
     // 透显缺陷修复 (探针 bleed_probe 实证): LO 文档窗口存在未绘制区 (如 impress
-    // 幻灯片窗口底部 37px 未被幻灯片覆盖, 见 [bleed-through]),
+    // 幻灯片窗口底部 37px 未被幻灯片覆盖, 见 [impress-bleed]),
     // 在无 backing store 的 Xvfb 上该区反射底层内容 —— calc 引导期曾以全屏
     // (30720x2160)渲染表格栅格, 其残留在共享大屏底层, 使 impress 帧底部透显出
     // xlsx 栅格。修复 = 设显式背景(黑)并重映射, 触发 LO 重绘其内容区,
