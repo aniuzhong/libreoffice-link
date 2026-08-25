@@ -57,7 +57,7 @@ void WriteLog(int lvl, const char* tag, const char* fmt, va_list ap) {
     if (LogToFile()) {
         static std::string s_path;
         if (s_path.empty()) {
-            // 路径统一 office_paths::logs_dir (2026-08-17; 基目录可 ORT_HOME 覆盖)
+            // 路径统一 office_paths::logs_dir (; 基目录可 ORT_HOME 覆盖)
             std::string dir = office_paths::logs_dir();
             std::replace(dir.begin(), dir.end(), '/', '\\'); // CreateDirectoryA 需求
             std::filesystem::create_directories(dir,

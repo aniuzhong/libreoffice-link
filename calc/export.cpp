@@ -1,7 +1,7 @@
 // calclink.cpp — C ABI 导出: 会话生命周期/播放控制/翻页/查询。
 // 会话实现见 calc_session.cpp。
 //
-// V4 修复 (2026-08-20, HANDOFF 七、已知漏洞): 会话生命周期外部状态机由
+// V4 修复 (, HANDOFF 七、已知漏洞): 会话生命周期外部状态机由
 // SessionRegistry 建模 (在册=live / 不在册=destroyed)。所有 ABI 入口经
 // Guard 校验在册才转发 — 销毁后调用任意 API 一律 no-op, 不触碰已释放
 // 内存; Guard 持锁期间 Destroy 的注销+delete 阻塞等待, 消除 TOCTOU。

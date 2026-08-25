@@ -202,7 +202,7 @@ int main(int argc,char** argv){
     printf("R5 teardown 完成(无挂起) => redirect 生命周期内恒定可行\n");
 
     // 注: XCloseDisplay 必须先于 dlclose —— libXcomposite 经 Xext 在 Display 上
-    // 注册 close hook, 先卸载会让 XCloseDisplay 跳进已卸载地址段 (2026-08-24
+    // 注册 close hook, 先卸载会让 XCloseDisplay 跳进已卸载地址段 (
     // 实测 SIGSEGV, core bt: XCloseDisplay -> 未映射地址)。
     XCloseDisplay(d); dlclose(hc);
     printf("[probe] done\n");

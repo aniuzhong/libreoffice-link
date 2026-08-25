@@ -99,7 +99,7 @@ public:
     // 抓一帧进实现自有缓冲区, 输出像素指针与尺寸。BGRA, 32bpp。
     virtual bool CaptureFrame(uint8_t*& pixels, int& width, int& height) = 0;
 
-    // 静音专项 (方案 A, 2026-08-21): 枚举本 session 放映主窗口下的所有子窗口 ID,
+    // 静音专项 (方案 A, ): 枚举本 session 放映主窗口下的所有子窗口 ID,
     // 用于 ffplay per-window 精确静音隔离。返回值传给子进程内的 FfplayManager
     // (setFastPropertyValue(MGR_PROP_MUTE_WINDOWS, {ids, mute})) → SetMuteAll 按
     // window_id 过滤引擎。Linux 实现: XQueryTree 递归枚举 win_ 子树 (跨进程可见);

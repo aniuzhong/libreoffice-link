@@ -98,7 +98,7 @@ void InitOfficeLog() {
 // 统一日志入口 (log.h): 前缀由调用方传, 跨进程时序靠时间戳对照。
 namespace {
 // ORT_LOG=off 时真正静默: 不初始化 logger 且直接丢弃 (spdlog 默认 logger
-// 会打 stdout, 仅跳过初始化并不能关掉 — 2026-08-17 收尾修正)
+// 会打 stdout, 仅跳过初始化并不能关掉 —  收尾修正)
 bool OfficeLogOff() {
     const char* mode = getenv("ORT_LOG");
     return mode && strcmp(mode, "off") == 0;
@@ -238,7 +238,7 @@ void CleanupOrphanSoffice() {
         const std::string env = ReadProcFile(entry.path().string() + "/environ");
         // DISPLAY=:N → 锁内 PID 死 = Xvfb 已死。**只判定我们的 Xvfb 号段
         // (90-99)**: 真实显示 (如 :0, Xorg 同样有 /tmp/.X0-lock) 不在本模块
-        // 号段内, 按锁判死会把正在 --convert-to 的转换进程误杀 (2026-08-13
+        // 号段内, 按锁判死会把正在 --convert-to 的转换进程误杀 (
         // 实测: 转换进程继承宿主 DISPLAY=:0, 被当孤儿 SIGKILL -> PDF 未生成
         // -> 上层 assert 崩)。
         bool xvfb_dead = false;
@@ -258,7 +258,7 @@ void CleanupOrphanSoffice() {
 }
 
 // 内核 profile 初始化: 从部署模板 (templates/user, 仓库 git 管理) fresh copy。
-// 语义 (2026-08-18, 与 Windows session seed 同一规则): 引导时重建 = 回到模板
+// 语义 (, 与 Windows session seed 同一规则): 引导时重建 = 回到模板
 // 基线, LO 运行期写回的状态 (UI/窗口残留) 不跨引导存活。
 // 活内核防护: 该 profile 正被某 soffice.bin 使用时 (cmdline 匹配, CleanupOrphan-
 // Soffice 同款判定) 跳过 —— 跨进程共享内核场景下复用引导路径会走到这里,
@@ -480,11 +480,11 @@ bool OfficeRuntime::EnsureKernel(const std::string& user_installation) {
         return true;
     }
     // 播放内核默认用独立 profile (经验 27):
-    //   1) 初始配置 = 部署模板 fresh copy (2026-08-18, templates/user, 见
+    //   1) 初始配置 = 部署模板 fresh copy (, templates/user, 见
     //      SeedKernelProfile; UI 三层控制: UNO API > 平台窗口 API > user 模板)
     //   2) 防御: 与任何默认 profile 的 soffice 调用 (外部转换/其他进程)
     //      彻底隔离 (不同 UserInstallation -> 不复用、不共享配置, 经验 22)
-    // 路径统一 office_paths::xvfb_profile (2026-08-18 player/ 更名)
+    // 路径统一 office_paths::xvfb_profile ( player/ 更名)
     std::string profile = user_installation;
     if (profile.empty()) {
         profile = office_paths::xvfb_profile();

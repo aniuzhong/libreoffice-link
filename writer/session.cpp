@@ -119,7 +119,7 @@ bool WriterSession::Create(const char* path, const char* password, const char* g
     Reference<css::lang::XMultiComponentFactory> factory = ctx_->getServiceManager();
     try {
         // desktop_ 保留引用: Windows Destroy 时 terminate 独立 soffice
-        // (calc/impress 同款; 否则进程残留, 2026-08-17 冒烟实测)
+        // (calc/impress 同款; 否则进程残留,  冒烟实测)
         desktop_.set(factory->createInstanceWithContext("com.sun.star.frame.Desktop", ctx_), UNO_QUERY);
         Reference<css::frame::XComponentLoader> loader(desktop_, UNO_QUERY);
         rtl::OUString pdfUrl;
@@ -267,7 +267,7 @@ bool WriterSession::EnsurePdf(const std::string& doc_path, const std::string& pa
     return true;
 }
 
-// 缓存总量回收 (简单策略, 2026-08-18): 目录总量超上限时按 mtime 最旧删除。
+// 缓存总量回收 (简单策略, ): 目录总量超上限时按 mtime 最旧删除。
 // 上限 ORT_WRITER_CACHE_MB 覆盖, 默认 500MB; 排除当前会话使用的 pdf_path_
 // (天然最新, 防御单文件超限场景)。失败静默 (回收是尽力而为, 不影响播放)。
 void WriterSession::EnforceCacheLimit() {

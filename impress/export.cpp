@@ -1,7 +1,7 @@
 // impresslink.cpp — C ABI 导出 (与 calclink 同构): 会话生命周期/播放控制/
 // 翻页/查询。会话实现见 impress_session.cpp。
 //
-// V4 修复 (2026-08-20, HANDOFF 七、已知漏洞): 所有 ABI 入口经
+// V4 修复 (, HANDOFF 七、已知漏洞): 所有 ABI 入口经
 // SessionRegistry::Guard 校验在册才转发 — 销毁后调用任意 API 一律 no-op,
 // 不触碰已释放内存; Guard 持锁期间 Destroy 的注销+delete 阻塞等待。
 // 会话内 destroyed_ 标志为第二层防护。经验 45 (重复 Destroy) 由

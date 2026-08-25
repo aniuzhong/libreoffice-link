@@ -58,7 +58,7 @@ struct Bleed {
     bool valid=false;
 };
 
-// 几何指标 (2026-08-24): 内容末行 (最后均值>8 的行) / 未绘制带高 /
+// 几何指标 (): 内容末行 (最后均值>8 的行) / 未绘制带高 /
 // 视图底边亮线行 (均值>200)。幻灯片满窗渲染时 contentEnd 应 = H-1。
 struct Geometry {
     int contentEnd=-1, bandRows=-1, brightLineY=-1;

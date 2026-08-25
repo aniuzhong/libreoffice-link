@@ -61,7 +61,7 @@ public:
     // 引导实现为自研 BootstrapOffice (复制官方 cppu::bootstrap 逻辑, 见
     // office_runtime.cpp), 支持可选独立 UserInstallation:
     //   user_installation 空 = 播放内核独立 profile ~/.office-link/xvfb
-    //     (2026-08-18 由 player/ 更名, 见经验 40; 不维护部署 office/user:
+    //     ( 由 player/ 更名, 见经验 40; 不维护部署 office/user:
     //     LO 会重建/写回运行时配置; UI 隐藏由
     //     UNO 动态控制; 与外部默认 profile 的 soffice 调用隔离, 经验 27);
     //   非空 = 指定 profile 内核 (转换等隔离场景, 多内核并存暂不支持,

@@ -60,7 +60,7 @@ static void StopXvfb(pid_t pid) {
         waitpid(pid, nullptr, 0);
     }
     // SIGKILL 的 X server 不清理自己的 lock/socket; 残留会让下一次同号启动
-    // "server already running" 失败 (2026-08-17 实测段错误根因)
+    // "server already running" 失败 ( 实测段错误根因)
     unlink(("/tmp/.X" + g_dpy.substr(1) + "-lock").c_str());
     unlink(("/tmp/.X11-unix/X" + g_dpy.substr(1)).c_str());
 }

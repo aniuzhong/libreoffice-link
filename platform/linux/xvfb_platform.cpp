@@ -210,7 +210,7 @@ bool GrabBgra(Display* d, Window w, std::vector<uint8_t>& out, int& ow, int& oh,
 // ---- LinuxBootSection (平台隔离设计: [platform-isolation] Part 2 D) ----
 // BootLock 构造函数本身即 Lock() (office_runtime.cpp BootLock::BootLock),
 // 成员构造时已持锁 —— 此处再调 Lock() 会同线程二次 lock 非递归 s_proc_mutex,
-// 立即自死锁 (2026-08-18 探针卡死根因, 经验 43)。
+// 立即自死锁 ( 探针卡死根因, 经验 43)。
 LinuxBootSection::LinuxBootSection() = default;
 
 void LinuxBootSection::Release() {
@@ -322,7 +322,7 @@ std::string XvfbSessionPlatform::GetLinkDir() {
 }
 
 // Linux: per-session profile 无消费方 (共享内核用 office_paths::xvfb_profile,
-// 独立 profile 仅 Windows bootstrap 使用; 原实现为死代码, 2026-08-17 清理)。
+// 独立 profile 仅 Windows bootstrap 使用; 原实现为死代码,  清理)。
 std::string XvfbSessionPlatform::GetProfileDir(const std::string&) {
     return std::string();
 }
@@ -480,7 +480,7 @@ bool XvfbSessionPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height
     Display* d = static_cast<Display*>(dpy_);
     if (!d || !win_)
         return false;
-    // 边圈黑化 (首帧/改尺寸后一次; 2026-08-24 透显缺陷收尾):
+    // 边圈黑化 (首帧/改尺寸后一次;  透显缺陷收尾):
     // VCL 框架内缩圈 (左2/顶1px) 是放映内容外的最后未绘制区 —— 顶行由 VCL 在
     // 每次曝光时主动刷白 (黑模板上呈 1px 白线), 左圈在窗口出生于其他文档之上时
     // 吸附外来像素 (透显残影)。LO 侧无解 (SetBackground 换不动曝光重绘, 负坐标
@@ -528,7 +528,7 @@ static void CollectSubtreeIds(Display* d, Window win, std::vector<long>& out) {
     XFree(kids);
 }
 
-// 静音专项 (方案 A, 2026-08-21): 枚举本 session 放映主窗口 win_ 下的所有子窗口 ID,
+// 静音专项 (方案 A, ): 枚举本 session 放映主窗口 win_ 下的所有子窗口 ID,
 // 用于 ffplay per-window 精确静音隔离 (子进程内 Manager 按 window_id 匹配引擎)。
 // 跨进程可见: soffice.bin 子进程内 LO 为媒体 shape 创建的 X11 子窗口, parent 链
 // 必然回溯到本 session 的放映主窗口 win_ (同一 Xvfb X server)。

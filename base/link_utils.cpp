@@ -90,7 +90,7 @@ css::uno::Reference<css::uno::XComponentContext> BootstrapSession(
 #endif
 
 // UI 元素表 (自省 + 隐藏共用): 覆盖 LO 各文档类型的可见 UI 元素。
-// 2026-08-14 补齐: Impress 的绘图工具栏 (drawbar, 顶部椭圆/矩形图标) 与
+//  补齐: Impress 的绘图工具栏 (drawbar, 顶部椭圆/矩形图标) 与
 // Sidebar Properties 面板 (PropertiesDeck, 右侧 Layout/Slide 属性) ——
 // 此前只隐藏 menubar, 这两个残留 (用户实测)。
 namespace {
@@ -184,7 +184,7 @@ void HideUiBlock(const css::uno::Reference<css::frame::XDispatchProvider>& prov,
     Reference<css::awt::XWindow> cont(frame->getContainerWindow(), UNO_QUERY);
     if (top.is()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kUiSettleMs));
-        // 诊断 (menubar 隐藏排查, 2026-08-17): 容器窗口形态 (尺寸变化 =
+        // 诊断 (menubar 隐藏排查, ): 容器窗口形态 (尺寸变化 =
         // 菜单栏/状态栏布局被移除的佐证)
         try {
             css::awt::Rectangle r = cont->getPosSize();
@@ -206,13 +206,13 @@ void HideUiBlock(const css::uno::Reference<css::frame::XDispatchProvider>& prov,
         OfficeLogDbg("[Common.UIHide] no XTopWindow on container window");
     }
     // 3. LayoutManager 隐藏全部 UI 元素 (menubar + 工具栏 + 状态栏 + Sidebar,
-    //    含 Impress 绘图工具栏 drawbar 与属性面板 PropertiesDeck —— 2026-08-14
+    //    含 Impress 绘图工具栏 drawbar 与属性面板 PropertiesDeck —— 
     //    实测这两项残留, 此前只隐藏 menubar; 不依赖 user 配置)
     Reference<css::frame::XLayoutManager> lm(
         factory->createInstanceWithContext("com.sun.star.frame.LayoutManager", ctx), UNO_QUERY);
     if (lm.is()) {
         lm->attachFrame(frame);
-        // 无条件 hideElement + 多轮重试 (2026-08-17):
+        // 无条件 hideElement + 多轮重试 ():
         //   ① isElementVisible 对未就绪元素恒 false (Windows 实测误报) ->
         //      hideElement 曾被跳过 -> menubar 残留被截屏; 无条件调用修复
         //   ② 窗口 UI 异步构建: 单次 hideElement 可能落在 UI 未就绪窗口期

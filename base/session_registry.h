@@ -87,7 +87,7 @@ private:
 
 // ---- ABI 异常边界 (V4 入口守卫第二要素, 与 Guard 并列) ----
 // C ABI 禁止 C++ 异常逃逸: 宿主线程无 handler (如裸 std::thread 工作线程)
-// 时 std::terminate → SIGABRT 全进程崩溃。实证 (2026-08-20 attack_uaf_probe
+// 时 std::terminate → SIGABRT 全进程崩溃。实证 ( attack_uaf_probe
 // UAF-1): 8 线程并发 Create/Destroy 竞态下 loadComponentFromURL 抛
 // lang::IllegalArgumentException 逃出 CalcSessionCreate → abort。
 // 所有 ABI 导出函数体经 AbiCall 包裹: 异常 → error 日志 + 返回失败值。

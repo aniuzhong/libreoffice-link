@@ -1,5 +1,5 @@
 // log.h — 统一日志声明 (跨模块共用: office_runtime/links/common 会话层)。
-// 前缀规范 (2026-08-17 收尾定稿): [模块名] = target 名 — [OfficeRuntime] /
+// 前缀规范 ( 收尾定稿): [模块名] = target 名 — [OfficeRuntime] /
 // [CalcLink] / [ImpressLink] / [WriterLink] / [Common]; 子场景点分
 // (如 [CalcLink.Scroll] / [Common.UIHide])。ffplay 组件运行在 soffice 进程
 // 内 (office_runtime.so 不在场), 保留独立 fprintf + [FFPLAY] 前缀。

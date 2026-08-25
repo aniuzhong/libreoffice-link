@@ -84,7 +84,7 @@ pid_t LockPid(int display_num) {
 
 // 防御性 kill: 目标必须是正 pid 且非自身, 并等死透再返回。pid 来自 lock
 // 文件/管道读回, 竞态下可能读到 0 或 -1 —— kill(0) 杀整个进程组、kill(-1)
-// 杀全部可杀进程, 均为灭组级事故 (2026-08-17 实测两次: 测试+同组 tail 全家
+// 杀全部可杀进程, 均为灭组级事故 ( 实测两次: 测试+同组 tail 全家
 // SIGKILL)。等死透的原因: 大屏 Xvfb (~300MB 映射) 被 SIGKILL 后有垂死窗口
 // (socket 仍监听), 不等就抢占同号必 "server already running" 失败;
 // waitpid 对非子进程 (双 fork 孤儿) 直接 ECHILD, 等不到死。
@@ -99,7 +99,7 @@ void SafeKill(pid_t pid) {
 // 清理 Xvfb 战场: 杀掉 90-99 号残留 Xvfb (锁内 PID 活则杀) + 清锁/socket。
 // 必须等死透再返回: 大屏 Xvfb (30720x2160, ~300MB 映射) 被 SIGKILL 后有
 // 垂死窗口 (socket 仍监听), 下一场景立即抢占同号会 "server already running"
-// 失败 (2026-08-17 实测: adopt/dirtyenv 孤儿 Xvfb 起不来 → 断言连锁 FAIL)。
+// 失败 ( 实测: adopt/dirtyenv 孤儿 Xvfb 起不来 → 断言连锁 FAIL)。
 void CleanXvfbBattlefield() {
     std::vector<pid_t> victims;
     for (int n = 90; n < 100; n++) {
@@ -492,7 +492,7 @@ int TestGstCheck() {
 
 // ---- 场景 8: link 符号一致性 (dlopen smoke) ----
 // calclink/impresslink 与 office_runtime 共享头文件 (BootLock 等 ABI),
-// 只重编其中一个会让 dlopen 时 undefined symbol (2026-08-12 曾踩, 经验 16)。
+// 只重编其中一个会让 dlopen 时 undefined symbol ( 曾踩, 经验 16)。
 // 此场景
 // 直接 dlopen 部署目录的两个 link, 符号解析失败即红。
 int TestLinkSmoke() {
@@ -524,7 +524,7 @@ int TestFaultInjection() {
     cfg.max_doc_height = 2160;
     CHECK(OfficeRuntime::Instance().Acquire(cfg), "Acquire #1");
     // display 号不假设 :90: 垂死竞态下 StartXvfb 会 lost-race 换号 (自愈正确);
-    // 盲取 LockPid(90) 可能得 0 → kill(0) 杀整个进程组 (2026-08-17 事故根因)
+    // 盲取 LockPid(90) 可能得 0 → kill(0) 杀整个进程组 ( 事故根因)
     int dnum = RtDisplayNum();
     pid_t pid1 = LockPid(dnum);
     CHECK(pid1 > 0 && ProcAlive(pid1), "Xvfb #1 pid=%d alive (display=%d)", (int)pid1, dnum);

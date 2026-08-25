@@ -231,7 +231,7 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
 
     // P8: [W@AfterStart] 绑定点 — plan.discover / plan.form 各自独立消费
     // (协议 Part 2 C: impress/Win discover=AfterStart 发现放映窗口 (start 后创建,
-    //   SALTMPSUBFRAME); impress/Linux form=AfterStart slot 落位; 2026-08-18
+    //   SALTMPSUBFRAME); impress/Linux form=AfterStart slot 落位; 
     //   Windows 探针实测: 缺 discover 分支则 hwnd_ 空 -> 抓帧 0 帧)
     if (plan_.discover == WindowPoint::AfterStart) {
         if (!platform_->DiscoverWindow()) {

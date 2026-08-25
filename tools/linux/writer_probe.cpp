@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     usleep(200 * 1000);
 
     // ---- LO 行为认知锚点: 混合页面尺寸文档 (WRITER_MIXED=1)。
-    // 实测 (2026-08-17): draw_pdf_Import 后所有页统一为第一页尺寸
+    // 实测 (): draw_pdf_Import 后所有页统一为第一页尺寸
     // (横竖混排 PDF 页 612x792/842x595/595x842 → createPreview 全 834x1080),
     // 故"缓存命中不刷新 width_/height_"的错配前提不存在 (LO 层恒同尺寸)。
     // 本段保留作回归锚点: 若未来 LO 行为变化 (尺寸开始随页变), 这里会 FAIL

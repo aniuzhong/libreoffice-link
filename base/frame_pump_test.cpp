@@ -275,7 +275,7 @@ void test_changed_fn_probe() {
 
 // ---- 测试 9: Start 作为恢复路径须重置 paused_ (经验 41 / P1 契约) ----
 // 场景: Start → Pause → Start(幂等) 应恢复推帧; 旧实现幂等早返未重置 paused_
-// 致 impress 暂停后恢复画面冻结 (2026-08-19 回归)。
+// 致 impress 暂停后恢复画面冻结 ( 回归)。
 void test_start_resets_paused_when_running() {
     printf("----- framepump: start_resets_paused_when_running\n");
     std::atomic<int> frame_count{0};

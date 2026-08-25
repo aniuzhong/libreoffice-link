@@ -2,7 +2,7 @@
 // 独立桌面 (CreateDesktop), 不参与 office_runtime (Linux 共享内核模式专属)。
 // 迁移自 calc/windows/calc_platform.cpp (接口统一为 LinkPlatform);
 // 文档类型差异 = 构造参数 (profile 子目录名), calc/impress 共用同一实现。
-// 契约 (2026-08-17 平台归位): PrepareEnvironment 完成环境+profile seed
+// 契约 ( 平台归位): PrepareEnvironment 完成环境+profile seed
 // (office\user UI 隐藏配置模板, 原 calc_session 会话层, Linux 死开销已消除);
 // EnsureKernel 完成每 session 三参 bootstrap (原会话层 #ifdef _WIN32 下沉,
 // link_utils::BootstrapSession), 会话层统一调用, 无平台分支。

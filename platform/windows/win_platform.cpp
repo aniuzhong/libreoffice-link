@@ -1,6 +1,6 @@
 // win_platform.cpp — Windows 平台实现 (独立进程模式, 见 win_platform.h)。
 // 迁移自 calc/windows/calc_platform.cpp (机械改名 GetCalclinkDir->GetLinkDir,
-// FindCalcWindow->FindWindow + profile 子目录参数化); 2026-08-17 平台归位:
+// FindCalcWindow->FindWindow + profile 子目录参数化);  平台归位:
 // profile seed 与三参 bootstrap 从 calc_session 会话层下沉本实现 (经验 38④)。
 #include "win_platform.h"
 
@@ -69,7 +69,7 @@ HWND FindMainWindowByPid(DWORD pid, HDESK hDesktop) {
 
 // 放映窗口 (Impress 全屏放映): LO 幻灯片放映窗口类名 SALTMPSUBFRAME, 标题
 // "Presenting: <文件名>" (旧项目 source/Communicator.cpp 验证过的定位方案,
-// 2026-08-17 impress Windows 全屏改造复用); 找不到回退 FindMainWindowByPid。
+//  impress Windows 全屏改造复用); 找不到回退 FindMainWindowByPid。
 HWND FindPresentationWindow(DWORD pid, HDESK hDesktop) {
     struct Ctx {
         DWORD pid;
@@ -165,7 +165,7 @@ SessionPlan WindowsPlatform::Plan() {
     //     时按最终形态创建, 反序 menubar 隐藏失效, demo 实测);
     //     impress 放映窗口 (SALTMPSUBFRAME) 在 start 后 (P8/AfterStart) 才创建,
     //     discover=AfterStart, form=None (LO 自管全屏窗口几何, 核心不碰, 经验 26;
-    //     AfterReveal 会抓到 Hidden 加载的编辑窗口 2856x1470, 2026-08-18 探针实测)
+    //     AfterReveal 会抓到 Hidden 加载的编辑窗口 2856x1470,  探针实测)
     SessionPlan plan{};
     plan.terminate_on_destroy = true;
     const bool is_impress = (std::string(profile_subdir_) == "impresslink");
@@ -213,7 +213,7 @@ std::string WindowsPlatform::GetLinkDir() {
 }
 
 std::string WindowsPlatform::GetProfileDir(const std::string& guid) {
-    // 路径统一 office_paths (2026-08-18): desktops/<link>/<guid> (名字直指
+    // 路径统一 office_paths (): desktops/<link>/<guid> (名字直指
     // 每 session 独立桌面机制); 输出 forward slashes。
     std::string profile = office_paths::desktop_profile(profile_subdir_, guid);
     std::error_code ec;
@@ -226,7 +226,7 @@ std::string WindowsPlatform::PrepareEnvironment(const std::string& link_dir,
     SetProcessDpiAwarenessContext(reinterpret_cast<DPI_AWARENESS_CONTEXT>(-4));
     SetDllDirectoryA(link_dir.c_str());
     // 禁用 LO 的 OpenGL 渲染 (Linux 经验 21 同款哲学): 隐藏桌面无 DWM 合成,
-    // GL 转场内容 PrintWindow 抓不到 -> 翻页动画白帧 (2026-08-17 demo 实测);
+    // GL 转场内容 PrintWindow 抓不到 -> 翻页动画白帧 ( demo 实测);
     // 转场退化为 CPU 渲染, 效果保留, 内容可抓。soffice 由 cppu::bootstrap
     // 启动, 环境快照继承本设置。
     SetEnvironmentVariableA("SAL_DISABLEGL", "1");
@@ -234,7 +234,7 @@ std::string WindowsPlatform::PrepareEnvironment(const std::string& link_dir,
     link_dir_ = link_dir;
 
     // profile seed: 从部署模板 (templates/user, 仓库 git 管理的净化 xcu;
-    // 2026-08-18 起 office/user 退役) fresh copy 到每 session profile。
+    //  起 office/user 退役) fresh copy 到每 session profile。
     // 语义与 Linux SeedKernelProfile 同一规则 (创建时回模板基线, 运行期
     // 写回不跨 session 存活), UI 三层控制的第三层 (UNO > 窗口 API > 模板)。
     {
@@ -292,7 +292,7 @@ bool WindowsPlatform::FindWindow() {
     hwnd_ = FindPresentationWindow(pid, static_cast<HDESK>(desk_));
     if (!hwnd_)
         hwnd_ = FindMainWindowByPid(pid, static_cast<HDESK>(desk_));
-    // 诊断 (menubar 隐藏排查, 2026-08-17): 找到的窗口身份/形态
+    // 诊断 (menubar 隐藏排查, ): 找到的窗口身份/形态
     if (hwnd_) {
         char cls[128] = { 0 }, title[256] = { 0 };
         GetClassNameA(static_cast<HWND>(hwnd_), cls, 127);
@@ -316,7 +316,7 @@ bool WindowsPlatform::SizeWindowToSlot(int width, int height) {
     // Windows 无 slot 概念 (Linux 大屏分区), "落位" = 全屏无边框窗口:
     // 原版 a21f5f67 直接 SetWindowPos (改 style 去标题栏 + 全屏), 重构后
     // 空实现导致窗口保持默认形态 (带标题栏/菜单栏), setMenuBar(null) 无效
-    // (2026-08-17 诊断日志证实: 容器 pos y=40 = 标题栏)。落位 = 全屏。
+    // ( 诊断日志证实: 容器 pos y=40 = 标题栏)。落位 = 全屏。
     return SetWindowSize(width, height);
 }
 
@@ -333,7 +333,7 @@ bool WindowsPlatform::SetWindowSize(int width, int height) {
     SetWindowLongPtrW(static_cast<HWND>(hwnd_), GWL_STYLE, style);
     BOOL pos_ok = SetWindowPos(static_cast<HWND>(hwnd_), nullptr, 0, 0, screenW, screenH,
                                SWP_FRAMECHANGED | SWP_NOZORDER);
-    // 诊断 (menubar 隐藏排查, 2026-08-17): 窗口形态修改结果
+    // 诊断 (menubar 隐藏排查, ): 窗口形态修改结果
     RECT rc_after;
     GetClientRect(static_cast<HWND>(hwnd_), &rc_after);
     OfficeLog("[Common.WinWindow] SetWindowSize %dx%d -> %dx%d, style 0x%llx, SetWindowPos=%d err=%lu, "
@@ -348,7 +348,7 @@ bool WindowsPlatform::SetWindowSize(int width, int height) {
 bool WindowsPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height) {
     if (!hwnd_)
         return false;
-    // SetThreadDesktop 只切换一次 (2026-08-17 2160p 帧率优化): 每帧切换桌面
+    // SetThreadDesktop 只切换一次 ( 2160p 帧率优化): 每帧切换桌面
     // 上下文有开销; 抓帧线程 (poll) 切换后永久绑定隐藏桌面 (该线程只抓帧,
     // 不需要回到原桌面)。
     if (desk_ && !desktop_switched_) {
@@ -391,7 +391,7 @@ bool WindowsPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height) {
     }
 
     HGDIOBJ old = SelectObject(static_cast<HDC>(cap_dc_), static_cast<HGDIOBJ>(cap_bmp_));
-    // 抓帧模式 (2026-08-17 2160p 帧率优化, demo 定调默认 bitblt):
+    // 抓帧模式 ( 2160p 帧率优化, demo 定调默认 bitblt):
     //   bitblt (默认): 直接读窗口 GDI 表面 (~10ms) —— SAL_DISABLEGL 后 LO 纯
     //     GDI 渲染, 窗口表面持续更新 (动画期间 LO 主动重绘), 静止时读旧表面
     //     (心跳帧内容相同无妨); 失败回退 PrintWindow
@@ -423,7 +423,7 @@ bool WindowsPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height) {
         OfficeLog("[Common.WinWindow] capture mode=%s (default bitblt, ORT_CAPTURE_MODE=printwindow 回退)\n",
                   bitblt_first ? "bitblt" : "printwindow");
     }
-    // 诊断 (2026-08-17 探针首帧全白排查): PrintWindow 结果 + 窗口/桌面状态
+    // 诊断 ( 探针首帧全白排查): PrintWindow 结果 + 窗口/桌面状态
     if (getenv("ORT_DUMP_CAPTURE")) {
         char cls[128] = { 0 }, title[256] = { 0 };
         GetClassNameA(static_cast<HWND>(hwnd_), cls, 127);
