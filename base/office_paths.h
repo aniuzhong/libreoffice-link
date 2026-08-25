@@ -1,19 +1,6 @@
-// office_paths.h — .office-link 路径命名空间统一 (双平台整合)。
-// 此前路径拼接散落 4 个文件 (office_runtime/xvfb_platform/win_platform/
-// writer_session) 各自 getenv/SHGetFolderPath, Windows 侧基目录分裂
-// (profile 用 Roaming, 日志/缓存用 Local)。
-// 本模块为纯函数 header-only: office_runtime 不链 common (经验 32), inline
-// 实现零链接依赖, 任何调用方 include 即用 —— 单点持有基目录决策与子路径派生。
-// 决策 (定稿):
-//   - Linux 基目录保持 ~/.office-link (fallback /tmp/.office-link): 零迁移
-//     成本, 已部署机器日志/缓存/内核 profile 不失效; 播放器为固定部署环境,
-//     不引入 XDG 迁移
-//   - Windows 基目录统一 %LOCALAPPDATA%\office-link (全 Local): 内容均本机
-//     数据 (日志/缓存/会话 profile), 无域漫游需求 (原 profile 在 Roaming)
-//   - ORT_HOME 环境变量覆盖基目录 (沿用 ORT_LOG 先例; 探针/测试/多实例隔离)
-//   - 输出统一 forward slashes (Windows 路径 API 兼容, 消灭分隔符分裂)
-// 边界 (依赖单向纪律, 经验 38③): NPOfficeCache 是 NovaOfficeCore 缩略图链的
-// 命名空间 (非本模块), writer 只读消费; 统一方向只能是上层提供查询接口。
+// office_paths.h — .office-link 路径命名空间统一 (双平台整合): 纯函数 header-only, 单点持有基目录决策与子路径派生 (office_runtime 不链 common, 经验 32)。
+// 基目录决策: Linux ~/.office-link (fallback /tmp); Windows %LOCALAPPDATA%\office-link 全 Local; ORT_HOME 可覆盖; 输出统一 forward slashes。
+// 边界 (单向纪律, 经验38③): NPOfficeCache 为 NovaOfficeCore 命名空间, writer 只读消费。
 #pragma once
 
 #include <algorithm>
@@ -76,8 +63,7 @@ inline std::string desktop_profile(const std::string& link,
 }
 
 // 共享内核工作 profile (Linux: 内核跑在 Xvfb 上, 名字直指虚拟屏机制;
-// 经验 27 隔离语义不变,  由 player/ 更名 + 引导时从模板 fresh
-// copy 初始化 — 与 Windows 同一规则, 频率为每内核引导一次)。
+// 经验 27 隔离语义不变, 引导时从模板 fresh copy 初始化 — 与 Windows 同一规则, 每内核引导一次)。
 inline std::string xvfb_profile() {
     return home() + "/xvfb";
 }

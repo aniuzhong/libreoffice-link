@@ -1,11 +1,6 @@
-// win_platform.h — Windows 平台实现: 每 session 独立 soffice 进程 +
-// 独立桌面 (CreateDesktop), 不参与 office_runtime (Linux 共享内核模式专属)。
-// 迁移自 calc/windows/calc_platform.cpp (接口统一为 LinkPlatform);
-// 文档类型差异 = 构造参数 (profile 子目录名), calc/impress 共用同一实现。
-// 契约 ( 平台归位): PrepareEnvironment 完成环境+profile seed
-// (office\user UI 隐藏配置模板, 原 calc_session 会话层, Linux 死开销已消除);
-// EnsureKernel 完成每 session 三参 bootstrap (原会话层 #ifdef _WIN32 下沉,
-// link_utils::BootstrapSession), 会话层统一调用, 无平台分支。
+// win_platform.h — Windows 平台实现: 每 session 独立 soffice 进程 + 独立桌面 (CreateDesktop), 不参与 office_runtime (Linux 共享内核模式专属)。
+// 文档类型差异 = 构造参数 (profile 子目录名); profile seed (office\user 模板) 与三参 bootstrap (link_utils::BootstrapSession) 自会话层下沉本实现。
+// 契约见 [platform-isolation] §E (经验39)。
 #pragma once
 
 #include <cstdint>

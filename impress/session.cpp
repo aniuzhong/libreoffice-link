@@ -211,7 +211,6 @@ bool ImpressSession::Create(const char* path, const char* password, const char* 
         presentation_ = Reference<css::presentation::XPresentation2>(pres, UNO_QUERY);
         presentation_->start();
         
-        // 等 settle_ms (形态稳定等待, plan.settle_ms)
         std::this_thread::sleep_for(std::chrono::milliseconds(plan_.settle_ms));
         
         slideshow_ = presentation_->getController();

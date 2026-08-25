@@ -149,7 +149,6 @@ std::string GetRuntimeDir() {
     return ".";
 }
 
-// 等待 Xvfb 显示可达 (轮询 XOpenDisplay)
 bool WaitForX(const std::string& dpy) {
     for (int i = 0; i < 50; i++) {
         Display* d = XOpenDisplay(dpy.c_str());

@@ -367,7 +367,6 @@ bool WriterSession::EnsurePageBitmap(int page) {
         return false;
     auto it = page_cache_.find(page);
     if (it != page_cache_.end()) {
-        // LRU 触碰
         lru_order_.erase(std::remove(lru_order_.begin(), lru_order_.end(), page), lru_order_.end());
         lru_order_.push_back(page);
         return true;

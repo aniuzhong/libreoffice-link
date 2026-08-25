@@ -29,7 +29,6 @@ std::string GetLinkDirImpl() {
     return ".";
 }
 
-// 等待 Xvfb 显示可达
 bool WaitForX(const std::string& dpy) {
     for (int i = 0; i < 50; i++) {
         Display* d = XOpenDisplay(dpy.c_str());
@@ -129,7 +128,6 @@ bool GrabBgra(Display* d, Window w, std::vector<uint8_t>& out, int& ow, int& oh,
         if (ok && !s_xerr_code) {
             out.resize(static_cast<size_t>(gw) * gh * 4);
             if (IsBgrxDirect(shm.img)) {
-                // BGRX 直拷 + alpha 置 FF
                 memcpy(out.data(), shm.img->data, out.size());
                 uint32_t* dst = reinterpret_cast<uint32_t*>(out.data());
                 size_t n = out.size() / 4;
@@ -430,13 +428,8 @@ bool XvfbSessionPlatform::SizeWindowToSlot(int width, int height) {
     XResizeWindow(d, win_, w, h);
     XSync(d, False);
 
-    // 透显缺陷修复 (探针 bleed_probe 实证): LO 文档窗口存在未绘制区 (如 impress
-    // 幻灯片窗口底部 37px 未被幻灯片覆盖, 见 [impress-bleed]),
-    // 在无 backing store 的 Xvfb 上该区反射底层内容 —— calc 引导期曾以全屏
-    // (30720x2160)渲染表格栅格, 其残留在共享大屏底层, 使 impress 帧底部透显出
-    // xlsx 栅格。修复 = 设显式背景(黑)并重映射, 触发 LO 重绘其内容区,
-    // 未绘制区落黑而非透显底层。
-    // ORT_BLEED_FIX=0 可关闭 (仅诊断/回归 A/B 用, bleed_probe 基线测量依赖)。
+    // 落位黑底 (透显根治保险带): 未绘制区显式落黑而非透显底层, 见 [impress-bleed] §4.2/§10。
+    // ORT_BLEED_FIX=0 可关闭 (诊断/回归 A/B 用)。
     if (!(getenv("ORT_BLEED_FIX") && strcmp(getenv("ORT_BLEED_FIX"), "0") == 0)) {
         XSetWindowBackground(d, win_, BlackPixel(d, DefaultScreen(d)));
         XClearWindow(d, win_);   // 清掉已污染的未绘制区像素, 落黑
@@ -450,9 +443,7 @@ bool XvfbSessionPlatform::SizeWindowToSlot(int width, int height) {
         runtime_.CheckWindowOverlap();
         runtime_.DumpWindowEdges();
     }
-    // 边圈黑化推迟到首帧 (edges_blackout_pending_): 本函数跑在 P8 (UI 隐藏 P9 之前),
-    // P9 的 setMenuBar/hideElement 重排版会让 VCL 把顶行重新刷白 —— 实测 X 层清了
-    // 2s 内即被复原; 首帧抓取发生在 P10 (P9 之后), 时序天然正确。
+    // 边圈黑化推迟到首帧 (edges_blackout_pending_): 本函数跑在 P8 (UI 隐藏 P9 之前), P9 重排版会刷白顶行; 首帧在 P10 (P9 后), 时序天然正确, 见 [impress-bleed] §4.4。
     edges_blackout_pending_ = true;
     return true;
 }
@@ -478,13 +469,7 @@ bool XvfbSessionPlatform::CaptureFrame(uint8_t*& pixels, int& width, int& height
     Display* d = static_cast<Display*>(dpy_);
     if (!d || !win_)
         return false;
-    // 边圈黑化 (首帧/改尺寸后一次;  透显缺陷收尾):
-    // VCL 框架内缩圈 (左2/顶1px) 是放映内容外的最后未绘制区 —— 顶行由 VCL 在
-    // 每次曝光时主动刷白 (黑模板上呈 1px 白线), 左圈在窗口出生于其他文档之上时
-    // 吸附外来像素 (透显残影)。LO 侧无解 (SetBackground 换不动曝光重绘, 负坐标
-    // 平移被父矩形裁剪); X 层"无曝光清法"可持有: 重设背景像素 + 清边圈不产生
-    // Expose, VCL 不知情故不重绘, 实测长期持有。放首帧执行 = P9 UI 隐藏之后,
-    // 避开 P9 重排版的重新刷白窗口期。
+    // 边圈黑化 (VCL 内缩圈/顶行白线/左圈吸附; LO 无解与无曝光清法/时序) 见 [impress-bleed] §4.4。
     if (edges_blackout_pending_) {
         XWindowAttributes a;
         if (XGetWindowAttributes(d, win_, &a) && a.width > 2 && a.height > 2) {

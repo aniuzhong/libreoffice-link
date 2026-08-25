@@ -1,11 +1,7 @@
-// link_platform.h — 统一平台接口 (原 CalcPlatform/ImpressPlatform 合并)。
-// 命名归位 (重构原则): 通用物无文档类型前缀; 文档类型差异 = 工厂函数 +
-// 平台实现的构造参数 (匹配规则/日志前缀), 见 common/linux 与 common/windows。
+// link_platform.h — 统一平台接口。
 // 平台按环境归组: Linux = Xvfb 共享内核模式 (office_runtime + X11 抓帧);
-// Windows = 每 session 独立 soffice 进程 + 独立桌面 (CreateDesktop,
-// calc/impress 共用 WindowsPlatform, 经验 39 补齐)。
-//
-// 平台隔离设计 ([platform-isolation] Part 2): 意图/机制分离, 会话层零 #ifdef。
+// Windows = 每 session 独立 soffice 进程 + 独立桌面 (CreateDesktop, calc/impress 共用, 经验 39)。
+// 设计(命名/归组/文档类型差异数据化)见 [platform-isolation] Part2。
 #pragma once
 
 #include <cstdint>

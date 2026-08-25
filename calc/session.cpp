@@ -124,7 +124,6 @@ bool CalcSession::ScrollByCols(int deltaCols) {
     return true;
 }
 
-// Remember the current viewport state so the poller does not re-push.
 void CalcSession::SyncViewportState() {
     try {
         if (pane_.is()) {
@@ -246,7 +245,6 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
             fz->freezeAtPosition(0, 0);
     }
 
-    // Hide headers/scrollbars/grid.
     Reference<XPropertySet> ps(controller_, UNO_QUERY);
     for (const char* name : { "HasColumnRowHeaders", "HasHorizontalScrollBar",
                               "HasVerticalScrollBar", "ShowGrid" }) {
@@ -304,7 +302,6 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
         platform_->FormWindow(target_w_, target_h_);
     }
 
-    // Viewport control + sheets.
     pane_.set(controller_, UNO_QUERY);
     view_.set(controller_, UNO_QUERY);
     Reference<css::sheet::XSpreadsheetDocument> doc(component_, UNO_QUERY);

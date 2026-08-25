@@ -84,7 +84,6 @@ void FramePump::PollThread() {
         if (!frame_fn_)
             continue;
 
-        // 探测: 内容是否可能变化
         bool changed = true;  // 默认恒真 (impress 无 probe)
         if (changed_fn_) {
             try {
@@ -111,7 +110,6 @@ void FramePump::PollThread() {
         if (ok) {
             last_push = now;
         } else {
-            // 抓帧失败退避
             std::unique_lock<std::mutex> lk(ctrl_mutex_);
             wake_cv_.wait_for(lk, backoff, [this] { return stop_requested_.load(); });
         }

@@ -87,10 +87,7 @@ css::uno::Reference<css::uno::XComponentContext> BootstrapSession(
 
 #endif
 
-// UI 元素表 (自省 + 隐藏共用): 覆盖 LO 各文档类型的可见 UI 元素。
-//  补齐: Impress 的绘图工具栏 (drawbar, 顶部椭圆/矩形图标) 与
-// Sidebar Properties 面板 (PropertiesDeck, 右侧 Layout/Slide 属性) ——
-// 此前只隐藏 menubar, 这两个残留 (用户实测)。
+// UI 元素表 (自省 + 隐藏共用): 覆盖 LO 各文档类型的可见 UI 元素 (含 Impress drawbar 绘图工具栏与 Sidebar PropertiesDeck)。
 namespace {
 // UI 隐藏时序 (HideUiBlock 使用; 经验 26/32)
 constexpr int kUiSettleMs = 1000;   // setMenuBar(null) 前等 UI 稳定

@@ -36,7 +36,6 @@
 
 namespace {
 
-// 查找进程在桌面上的最大顶层窗口
 HWND FindMainWindowByPid(DWORD pid, HDESK hDesktop) {
     struct Ctx {
         DWORD pid;
@@ -311,10 +310,7 @@ bool WindowsPlatform::FindWindow() {
 }
 
 bool WindowsPlatform::SizeWindowToSlot(int width, int height) {
-    // Windows 无 slot 概念 (Linux 大屏分区), "落位" = 全屏无边框窗口:
-    // 原版 a21f5f67 直接 SetWindowPos (改 style 去标题栏 + 全屏), 重构后
-    // 空实现导致窗口保持默认形态 (带标题栏/菜单栏), setMenuBar(null) 无效
-    // ( 诊断日志证实: 容器 pos y=40 = 标题栏)。落位 = 全屏。
+    // Windows 无 slot 概念 (Linux 大屏分区), "落位" = 全屏无边框窗口 (SetWindowSize)。
     return SetWindowSize(width, height);
 }
 
