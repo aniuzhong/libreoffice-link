@@ -1,6 +1,6 @@
 # 经验详述（HANDOFF.md 二章伴随文件）
 
-> 本文件承载 HANDOFF.md "二、历史经验" 中篇幅较长的详述（经验 38/40/41/42）、
+> 本文件承载 HANDOFF.md "二、历史经验" 中篇幅较长的详述（经验 38/40/41/42/48/49）、
 > 关键经验失效条件表、零引用经验清单。
 > 经验编号主索引（表格 + 时间 + 置信度）仍在 HANDOFF.md 二章；编号只增不改。
 > 阅读路径: 先读 HANDOFF.md 二章表格定位经验号, 按需跳入本文件对应详述。
@@ -78,6 +78,7 @@
   - **Statusbar 不在 toolbar 命名节点** — `/org.openoffice.Office.UI.ImpressWindowState/UIElements/States` 直项内嵌 `<node oor:name="private:resource/statusbar/statusbar">` Visible=false; 白名单规则若要求路径含 `resource/toolbar/` 会漏掉它(第一轮净化就这么丢的)
   - **UNO 自省盲区**: LayoutManager.isElementVisible 对 SFX 子窗口(sidebar)报 0 而像素仍在(hideElement 对它不生效/无意义) — UI 自省不能完全反映真实布局, 肉眼是最终裁判(用户定论); 这两个元素的**有效控制层 = 模板**(三层优先级里的第三层在此场景反而是唯一起效的)
   - 模板再净化(用户从 UI 重新配置再提取)时的保留规则: 上述两条的位置匹配必须保留(States 直项路径精确匹配 + `simpress/10336` 内容匹配), 否则重新丢条目
+  - **Calc 侧保留规则(2026-08-28 补, 经验 49)**: Calc 同机制, Views/Windows 需保留 `WindowType['scalc/10336']`(UserData=`V2,H,...` 关闭形态) + `SplitWindow0-3` + 扁平节点 `scalc/10365`/`scalc/26100`; 整条路径进 `oor:path=`, grep `scalc/10336` 查不到节点名(同上审计陷阱)。采用 Views 方案后 DeckList ContextList hidden 非必需(B 原样 deck 全 visible 同样无条)
 - ⑧ **模板部署陈旧坑(2026-08-18 实测踩过)**: 仓库模板更新后 office/program/templates/ 部署副本仍是旧的(上次构建早于模板编辑) → Linux seed 用部署副本, 运行时 profile 一直缺条目, 症状="模板明明加了配置但不生效"。**规则: 改 templates/user 后必须重建 OfficeRuntime(POST_BUILD 拷贝)或手动 cp, 并 diff 确认部署副本一致**; 排查 UI 不生效先核对三方(仓库模板/部署副本/运行时 profile)条目数
 - ⑨ **活内核 seed 跳过的验证姿势**: SeedKernelProfile 的活内核防护(cmdline 匹配跳过)意味着**改模板后若内核还活着, 新配置不生效** — 需确保 soffice 重启(探针退出会 atexit 停内核; demo 常驻进程需重启)
 
@@ -123,6 +124,54 @@
 - ⑧ **LO 统一尺寸认知(draw_pdf_Import)**: 混合页面尺寸 PDF(横竖混排实测 612x792/842x595/595x842)导入 Draw 后**所有页统一为第一页尺寸**, createPreview 全部同尺寸输出(834x1080)——"缓存命中不刷新 width_/height_ 的错配前提不存在"(per-page 尺寸处理不需要); writer_probe 的 WRITER_MIXED 段留作回归锚点(LO 行若变会 FAIL 提醒)
 - ⑨ writerlink 纳入 linksmoke(ABI 一致性同机制, 单测 49→50 检查)
 - ⑩ calc_session 精简 include 后 syscall 需显式 <unistd.h>(传递包含被移除暴露); 2026-08-18 改进: 加 <sys/syscall.h> 用 SYS_gettid 宏替代硬编码 186(x86_64=186, aarch64 不同, 可移植)
+
+---
+
+## 经验 48 详述：Calc 三级打开策略（只读横幅 / 残留锁 / 外部写锁）
+
+**Calc 三级打开策略 (2026-08-27 Windows 隐藏桌面实证, 2026-08-28 Linux run.sh 回归, 收录自下游实践)**
+
+原 calc 打开为固定 `ReadOnly=true` (规避残留 `.~lock.<name>#` 致 loadComponentFromURL 静默 null, 见经验 40⑥), 但 LO 对只读文档**必然渲染顶部 Infobar 横幅**, 且横幅属 SFX Infobar 系统, LayoutManager/hideElement 均管不到 —— 播放画面顶部常驻脏带。改为三级打开策略 (`calc/session.cpp` Create):
+
+1. **删残留锁**: 打开前删 `.~lock.<name>#`。**已知边界**: 锁文件无法区分崩溃残留与活的外部 soffice 会话 (经验 22/40⑥ 场景), 按崩溃残留处理 (正常关闭不留锁)。
+2. **外部写锁预检 (Win32)**: `CreateFileW(GENERIC_READ|WRITE, FILE_SHARE_READ)` 试开源文件, 命中 `ERROR_SHARING_VIOLATION` 说明被外部进程占写 → **跳过普通模式直接 ReadOnly**。绝不能让正常模式去撞锁 —— 隐藏桌面会弹模态 "Document in Use" 对话框卡死整个会话。实现收在 `link_utils::SourceWriteLocked` (平台差异落基础层函数内部, u2w/to_path 同款模式, 会话层零逻辑 `#ifdef`)。
+3. **两级加载**: 先普通模式 (无 ReadOnly, 无横幅), null 才兜底 ReadOnly=true (横幅由种子模板 `Infobar/Enabled/Readonly=false` 禁用, 经验 49)。
+
+边界情况实测 (Windows):
+
+| 场景 | 行为 | 结果 |
+|------|------|------|
+| 无任何锁 | 删锁(无操作)→普通模式 | 标题无 read-only, 无横幅 |
+| 外部进程占写锁 (GENERIC_READ + FILE_SHARE_READ) | 预检命中→直接 ReadOnly | 正常出画, 无横幅 |
+| 外部进程独占 (share=0) | ReadOnly 也 null | 会话创建失败 (合理, 文件不可读) |
+| 本会话播放中 | LO 自建自持 `.~lock` | Destroy→close(false) 自动清除 |
+
+验证: Windows 用 `probe_win/localtest/mini_probe.cpp` (LoadLibraryEx 加载部署态 calclink.dll 抓帧落盘) + python ctypes `CreateFileW` 造外部锁; Linux run.sh 全量回归。
+
+---
+
+## 经验 49 详述：Sidebar 容器本体关闭（Views/Windows 持久化布局）+ Infobar 种子开关
+
+**Sidebar 容器关闭 + Infobar 开关 (2026-08-27 Windows 实证, 收录自下游实践)**
+
+**Sidebar 可见性三层定论**: ① Deck tab (xcu ContextList 控制) → ② deck 面板区 (Layout/UNO 可切) → ③ **容器本体 (无任何官方开关, LO 24.2 上不可关)**。Container 由 LO 按用户手动关闭/调整侧栏后的**停靠布局持久化状态**决定形态, 存储在 `/org.openoffice.Office.Views/Windows` 节点 (SplitWindow0-3、`WindowType['scalc/10336']` UserData=`V2,H,...`、`scalc/26100`=`V2,V,20` 等)。
+
+**解法**: 全新 profile 没有该节 → LO 每次 AUTO 布局出默认宽度 tab 条; 把关闭形态的持久化条目种进种子模板, 容器即按"已关闭"布局启动, 右侧完全干净。Calc 保留条目清单见经验 40⑦ Calc 补则。
+
+**手段有效性矩阵 (勿重试无效项)**:
+
+| 手段 | 结果 |
+|------|------|
+| 种子并入 Views/Windows 整节 | ✅ 彻底消失 (本解法) |
+| DeckList ContextList 全部 hidden | 图标消但容器仍在 (71 物理像素空带); 采用 Views 后非必需 |
+| LayoutManager hideElement sidebar/Sidebar 或 dockingwindow | 无效 |
+| XSidebarProvider setVisible(false) / .uno:Sidebar dispatch | 无效 |
+| ToolbarMode Active=Single(Sidebar=Arrow) | 宽度不变 |
+| CalcWindowState SidebarDockingWindow Visible=false (扁平 item) | 无效果 |
+
+**Infobar 种子开关**: 只读横幅等 Infobar 由 `/org.openoffice.Office.UI.Infobar/Enabled/{Readonly,Signature,Donate,...}` 控制 (= Expert Configuration 的 Infobar 可见性, LO ≥ tdf#101652); schema 见部署 `share/registry/main.xcd`。**排查配置先读部署 schema** —— Infobar 开关与 ContextList 取值空间都是这么找到的。
+
+**教训**: 种子 xcu "看起来存在"不等于"覆盖了所有键" —— ScFunctionsDeck 缺条目致 fx 图标漏网, 要按 UI 实物逐项反查 IDL/组件名; 模板与部署副本两份, 改后必须 POST_BUILD 重建或手动 cp 并 diff (经验 40⑧)。
 
 ---
 

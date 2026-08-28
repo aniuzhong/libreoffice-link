@@ -72,6 +72,14 @@ std::filesystem::path to_path(const std::string& utf8);
 // UTF-8 路径, 否则返回空串。用于加载失败时诊断残留锁 (见缺陷报告/经验)。
 std::string GetLockFileIfExists(const std::string& doc_path);
 
+// 源文件外部写锁预检 (Windows 专属防御, 平台差异收基础层函数内部 — u2w/to_path
+// 同款模式, 会话层保持零 #ifdef)。检测源文件是否被外部进程以写方式占用
+// (CreateFileW 试开 GENERIC_READ|WRITE 命中 ERROR_SHARING_VIOLATION)。
+// 用途: 命中时跳过普通模式直接 ReadOnly 打开 —— 正常模式撞外部写锁会在
+// 隐藏桌面弹模态 "Document in Use" 对话框, 卡死整个会话。
+// Linux: 无共享冲突模态风险, 恒返回 false。
+bool SourceWriteLocked(const std::string& path);
+
 // 内核宿主 (G 缝, [platform-isolation] Part 2 G): writer 无 LinkPlatform 层 (经验 38④
 // 无窗口/无抓帧), 引导缝 (Acquire/BootLock/EnsureKernel vs BootstrapSession)
 // 收进本工具, writer 会话零 #ifdef。calc/impress 走 LinkPlatform 体系, 不用本类。

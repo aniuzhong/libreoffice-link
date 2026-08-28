@@ -261,5 +261,16 @@ std::string GetLockFileIfExists(const std::string& doc_path) {
     return std::string();
 }
 
+// ---- 源文件外部写锁预检 (见头文件注释; Windows 实现收 .cpp 内部, u2w 同款) ----
+bool SourceWriteLocked(const std::string& path) {
+#ifdef _WIN32
+    HANDLE h = CreateFileW(u2w(path).c_str(), GENERIC_READ | GENERIC_WRITE,
+                           FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+        return GetLastError() == ERROR_SHARING_VIOLATION;
+    CloseHandle(h);
+#endif
+    return false;
+}
 
 }  // namespace link_utils

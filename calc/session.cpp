@@ -1,6 +1,7 @@
 #include "session.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -215,16 +216,41 @@ bool CalcSession::Create(const char* path, const char* password, const char* gui
         if (osl::FileBase::getFileURLFromSystemPath(sysPath, docUrl) != osl::FileBase::E_None)
             return false;
     }
-    css::uno::Sequence<css::beans::PropertyValue> loadProps(2);
-    loadProps[0].Name = "Hidden";
-    loadProps[0].Value <<= true;
-    // ReadOnly: 播放为只读消费, 避免 LO 创建/校验源目录文档锁 (`.~lock.<name>#`),
-    // 根除残留锁导致 loadComponentFromURL 静默返回 null 的缺陷 (缺陷报告)。
-    loadProps[1].Name = "ReadOnly";
-    loadProps[1].Value <<= true;
-    component_ = loader->loadComponentFromURL(docUrl, "_blank", 0, loadProps);
+    // 打开策略:
+    // 1. 先删残留锁 (崩溃残留 `.~lock.<name>#` 曾致 loadComponentFromURL 静默 null);
+    //    已知边界: 锁文件无法区分崩溃残留与活的外部 soffice 会话 (经验 22/40⑥ 场景),
+    //    当前按崩溃残留处理 (正常关闭不留锁);
+    // 2. 正常模式打开 —— ReadOnly 会出 "只读" infobar 横幅且无隐藏手段 (XInfoBarUI 头树缺失), 只作兜底;
+    // 3. 源文件被外部进程占用 (共享冲突) 时跳过尝试直接 ReadOnly, 防隐藏桌面上弹模态 "文档使用中" 对话框卡死会话。
+    {
+        std::string lock = link_utils::GetLockFileIfExists(path);
+        if (!lock.empty()) {
+            std::error_code ec;
+            std::filesystem::remove(link_utils::to_path(lock), ec);
+            OfficeLog("[CalcLink] stale lock %s (%s)", lock.c_str(), ec ? "remove FAILED" : "removed");
+        }
+    }
+    bool start_readonly = link_utils::SourceWriteLocked(path);
+    if (start_readonly)
+        OfficeLogWarn("[CalcLink] source file externally locked -> open ReadOnly directly");
+    auto tryLoad = [&](bool ro) -> Reference<XComponent> {
+        css::uno::Sequence<css::beans::PropertyValue> loadProps(ro ? 2 : 1);
+        loadProps[0].Name = "Hidden";
+        loadProps[0].Value <<= true;
+        if (ro) {
+            loadProps[1].Name = "ReadOnly";
+            loadProps[1].Value <<= true;
+        }
+        return loader->loadComponentFromURL(docUrl, "_blank", 0, loadProps);
+    };
+    component_ = start_readonly ? Reference<XComponent>() : tryLoad(false);
     if (!component_.is()) {
-        // 静默 null: 优先怀疑残留锁文件 (诊断)
+        if (!start_readonly)
+            OfficeLogWarn("[CalcLink] normal open failed -> fallback ReadOnly (横幅已由 Infobar 种子配置禁用)");
+        component_ = tryLoad(true);
+    }
+    if (!component_.is()) {
+        // 两次都失败: 诊断残留锁
         std::string lock = link_utils::GetLockFileIfExists(path);
         std::string msg = lock.empty()
             ? std::string("doc loaded FAILED (null); no lock file")

@@ -16,7 +16,7 @@
 | 怎么构建/跑探针/单测 | [1.3 构建](#13-构建部署) + [1.4 沙箱运行策略](#14-沙箱运行策略必读) |
 | **TRAE sandbox 限制/跑前清场/并行会话互踩** | **[1.4 沙箱运行策略](#14-沙箱运行策略必读)** |
 | 项目架构/关键路径/当前状态 | 一、项目现状 |
-| 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42 详述+失效条件+零引用清单) |
+| 某条经验的具体细节 | 二、经验表格(主索引) → [experiences.md](experiences.md)(38/40/41/42/48/49 详述+失效条件+零引用清单) |
 | 平台隔离设计(3.3 P0-P10 协议/LinkPlatform)/UI 隐藏根因 | [platform-isolation.md](platform-isolation.md) |
 | FramePump 设计决策/性能预算/测试矩阵 | [framepump.md](framepump.md) |
 | **共享屏治理栈 (6 层机制+必要性实证, 经验 47)** | **六、共享屏治理专项** → [impress-bleed.md](impress-bleed.md) |
@@ -189,7 +189,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 
 ---
 
-## 二、历史经验(勿回退;编号被代码注释引用) [经验·永久] (updated 2026-08-19)
+## 二、历史经验(勿回退;编号被代码注释引用) [经验·永久] (updated 2026-08-28)
 
 > 时间=提出/验证时间;置信度:高=源码级或多次实测,中=单次实测,低=推断。
 > **详述**(经验 38/40/41/42)+ **失效条件表** + **零引用清单** 见 [experiences.md](experiences.md)。
@@ -210,6 +210,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | 43 | **BootLock 构造即加锁 + 非递归 mutex 自死锁**:包装"构造即获取"型 RAII 资源, 包装层构造函数必须为空; 二次 Lock = 静默永久死锁(无日志/超时不保护)。详见 [platform-isolation.md](platform-isolation.md) Part 1 | 08-18 | 高(源码级+实测修复) |
 | 44 | **Calc 公式栏 (fx/Σ 输入行) 隐藏 (2026-08-18 demo 实测)**:公式栏是 **SFX docking window** (UI 布局 inputbar.ui, 窗口类 InputBar), **不是 LayoutManager toolbar 元素** —— hideElement(formulabar)/模板条目/ShowFormulaBar 属性 (SDK IDL 无此名, 猜测无效) 全部不生效; 老 office/user 亦无其持久化条目。**真实控制 = UNO 命令 `.uno:InputLineVisible`** (scalc menubar.xml View 菜单有据可查), dispatch 需 **frame_ provider** (文档级 sc 模块命令; desktop_ queryDispatch 返回 NOT found —— 桌面级命令如 FullScreen 才用 desktop_); 每次会话从模板基线开始公式栏默认显示, toggle 一次即隐藏 (状态确定, 无需查询)。排查陷阱: 公式栏相关的 popupmenu/formulabar.xml 是弹出菜单非主控件; 探针环境 LO 渲染不完整 —— UI 验证以 demo 为准。**排查纪律**: UNO_SILENT 异常进 debug 级日志, "静默失败"排查第一动作开 ORT_LOG_LEVEL=debug 看 `UNO exception (silent)` 痕迹。**[2026-08-19 4.2 实证修正]**: InputLineVisible dispatch 在 Linux 共享内核下破坏 vis=0 初始态导致 UI 复活, 已下沉至 Windows HideUiExtras (Linux 空操作); LO Xvfb 无头环境公式栏默认 vis=0 不显示, 无需 dispatch | 08-18 | 高(实测, 部分认知已修正) |
 | 45 | **C ABI 重复 Destroy UAF 防护 (V4 双层防护已补全)**: C ABI `ImpressSessionDestroy` / `CalcSessionDestroy` 直接 `delete static_cast<...*>(session)`, 重复调用时悬垂指针 → use-after-free → SIGABRT (确定性必现)。修复: `SessionRegistry` (recursive_mutex + live 集合), `Register`/`TryRevoke`/`Guard`/`WithGuard` 回调式守卫。**V4 补全 (2026-08-20)**: `Guard` 拦截销毁后所有 API 调用 + `AbiCall` 异常边界 + 会话内 `destroyed_` 标志。**WithGuard 重构 (2026-08-20)**: 消除重复 `Guard g + if(!g)` 模式, 三 link 统一回调式。失效条件: 改用智能指针管理 session 生命周期时本防护可移除 | 08-20 | 高(已修复, V4 实证全绿) |
+| 48 | **Calc 三级打开策略 (2026-08-28 收录)**: 固定 ReadOnly 必出只读 Infobar 横幅且无隐藏手段 → 改为 删残留锁 → 外部写锁预检 (Win32 `link_utils::SourceWriteLocked`, 命中直接 ReadOnly 防隐藏桌面模态 "Document in Use" 卡死) → 普通模式优先/ReadOnly 兜底 (横幅由种子 Infobar 配置禁用)。锁文件无法区分崩溃残留与活外部会话 (已知边界)。[详述](experiences.md) | 08-28 | 高(双平台实测) |
 
 ### 2.2 跨进程协调(共享屏/内核/slot)
 
@@ -272,6 +273,7 @@ NovaPlayer/bin_x86_64_kylin/office_runtime_test [--stress N]
 | # | 经验 | 时间 | 置信度 |
 |---|---|---|---|
 | 40 | **user 模板机制 + office-link 命名定稿**:UI 控制三层优先级 / 命名 / 模板净化 / 消费语义 / 孤儿文档锁坑 / sidebar+statusbar 存储位置与部署陈旧坑(⑦⑧)。详见 [experiences.md](experiences.md) 经验 40 详述 | 08-18 | 高(实证) |
+| 49 | **Sidebar 容器本体关闭 + Infobar 种子开关 (2026-08-28 收录)**: Sidebar 可见性分三层 (Deck tab / deck 面板 / **容器本体 24.2 无官方开关**), 容器形态由 `/org.openoffice.Office.Views/Windows` 停靠布局持久化决定 — 种入关闭形态条目即彻底消失 (Calc 保留清单见经验 40⑦ 补则); 无效手段矩阵勿重试。Infobar 由 `Infobar/Enabled/{Readonly,...}` 种子开关控制 (排查配置先读部署 `share/registry/main.xcd`)。[详述](experiences.md) | 08-28 | 高(Windows 实证) |
 | 38 | **writer 渲染方案可行性**:docx→PDF→Draw→XSlideRenderer→BGRA 全 UNO 自治 / 接口细节 / 性能 / 缓存 / 上层接线 / 质量收尾。详见 [experiences.md](experiences.md) 经验 38 详述 | 08-17 | 高(实测) |
 | 39 | **Windows 平台差异定稿**:per-session 独立 soffice + 隐藏桌面 (`SALTMPSUBFRAME`) + `IsFullScreen=true` (LO 自管窗口, 无菜单栏/标题栏) + 双平台日志同款实现 (Linux runtime.cpp spdlog / Windows platform/win_office_log.cpp) — 与 Linux 共享内核模式正交的设计分支。代码引用: session.h:6 / session.cpp:7 / session.h:24 / link_platform.h:6 / win_platform.cpp:156 / log.h:12 / platform/CMakeLists.txt:16 / runtime.h:19 | 08-19 | 高(架构定稿) |
 

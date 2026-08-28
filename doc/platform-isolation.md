@@ -165,6 +165,7 @@ Release)是同一"引导+串行+生命周期"缝。两个选项:
 | 22/23/27(bootstrap/profile 隔离) | EnsureKernel/BootstrapSession 契约(意图)+平台实现(机制) |
 | 26(放映中 UNO 几何黑屏) | FormWindow 契约 + 核心不持窗口句柄(构造性) |
 | 38④(writer 无平台层) | G 缝选择 |
+| Calc 外部写锁预检 (Win32 CreateFileW, 经验 48) | link_utils::SourceWriteLocked (基础层函数内部 `#ifdef`, u2w/to_path 同款; 预检/编码类平台差异落基础层函数为 G1 同族裁决, 会话层保持零逻辑 `#ifdef`) |
 | 41(paused_ 重置在入口函数) | FramePump::Start 契约 (泵内无条件 paused_=false, 经验 42 承接) |
 | Win settle 2500ms / 反序定型 / 1.5s 形态稳定 | win_platform.cpp 内部 + plan 数据 |
 
