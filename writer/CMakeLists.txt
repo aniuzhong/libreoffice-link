@@ -48,9 +48,16 @@ if(UNIX AND NOT APPLE)
         -Wl,--allow-shlib-undefined
         -Wl,--export-dynamic
         Threads::Threads rt dl)
+    # RUNPATH 必须是 $ORIGIN (同目录) 而不是部署目录的绝对路径: 交付时整个 office/
+    # 会被拷到 <bin>/office, 编译机路径随之下线, 下游 dlopen 就找不到
+    # office_runtime.so —— DT_RUNPATH 不沿 dlopen 链继承, 宿主的 RPATH 救不了。
+    # (同 impress/calc)
     target_link_libraries(WriterLink PRIVATE
-        "-Wl,-rpath,${WRITERLINK_DEPLOY_DIR}"
+        "-Wl,-rpath,\$ORIGIN"
         "${WRITERLINK_DEPLOY_DIR}/libstdc++.so.6")
+    # 否则 CMake 把编译机的 office/program (OfficeRuntime 的目标目录) 与 office/sdk/lib
+    # 也写进 RUNPATH, 同上属于交付后失效的路径
+    set_target_properties(WriterLink PROPERTIES SKIP_BUILD_RPATH ON)
 endif()
 
 add_custom_command(TARGET WriterLink POST_BUILD

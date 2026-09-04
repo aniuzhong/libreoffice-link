@@ -34,13 +34,19 @@ if(UNIX AND NOT APPLE)
         -Wl,--allow-shlib-undefined
         -Wl,-export-dynamic
         Threads::Threads rt dl X11::X11 X11::Xext)
-    # 组件自包含: RUNPATH 指向部署目录(program), 并显式链接 LO 自带的 libstdc++
-    # (GLIBCXX 版本高于系统); 使任何进程 dlopen calclink.so 都不依赖 LD_LIBRARY_PATH
+    # 组件自包含: RUNPATH 指向同目录 ($ORIGIN = 部署后的 office/program), 并显式链接
+    # LO 自带的 libstdc++ (GLIBCXX 版本高于系统); 使任何进程 dlopen calclink.so
+    # 都不依赖 LD_LIBRARY_PATH。
+    # 不能写部署目录的绝对路径 (${CALCLINK_DEPLOY_DIR}): 交付时整个 office/ 会被拷到
+    # <bin>/office, 编译机路径随之下线, 下游 dlopen 就找不到 office_runtime.so —— 而
+    # DT_RUNPATH 不沿 dlopen 链继承, 宿主进程自己的 RPATH 救不了。
+    # UNO 运行库 (libuno_*.so.3) 同在 office/program, $ORIGIN 一并覆盖。
     target_link_libraries(CalcLink PRIVATE
-        "-Wl,-rpath,${CALCLINK_DEPLOY_DIR}"
+        "-Wl,-rpath,\$ORIGIN"
         "${CALCLINK_DEPLOY_DIR}/libstdc++.so.6")
-    # 运行时 UNO 库 (libuno_*.so.3) 在 office/program, 由宿主进程的
-    # LD_LIBRARY_PATH 提供 (与 NovaLibreOfficePlayer/run.sh 同一模式)
+    # 否则 CMake 把编译机的 office/sdk/lib (LibreOffice::Sdk 的链接目录) 也写进 RUNPATH,
+    # 同上属于交付后失效的路径
+    set_target_properties(CalcLink PROPERTIES SKIP_BUILD_RPATH ON)
 endif()
 
 add_custom_command(TARGET CalcLink POST_BUILD
